@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+# dccon-downloader.spec 는 생성물이 아니라 소스다.
+downloaded/
+.ui-preview/
+
+# 아이콘은 tools/make_icon.py 로 재생성 가능하지만 커밋해 둔다.
+
+
+
+example.py
