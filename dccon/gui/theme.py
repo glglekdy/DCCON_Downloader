@@ -325,10 +325,11 @@ def _restyle(app: QApplication, *, force: bool = False) -> None:
         return
     _active = tokens
     app.setPalette(_palette(tokens))
+    # 스타일시트가 바뀌면 모든 위젯이 StyleChange 를 받아 다시 그려지므로
+    # 카드처럼 직접 그리는 위젯도 새 토큰으로 칠해진다.
+    # app.allWidgets() 를 돌며 update() 하지 말 것: 파이썬 객체가 먼저 사라진
+    # 위젯이 섞여 있으면 PySide 가 래퍼를 만들다 프로세스째 죽는다.
     app.setStyleSheet(build_style(tokens))
-    # 직접 그리는 위젯(카드)은 스타일시트가 바뀌어도 색을 다시 안 읽을 수 있다.
-    for widget in app.allWidgets():
-        widget.update()
 
 
 def apply(app: QApplication, mode: str) -> None:
