@@ -2,6 +2,7 @@
 
 package_detail : POST /index/package_detail  (JSON)
 검색            : GET  /hot/{page}/{type}/{word}  (서버 렌더 HTML, UTF-8)
+전체 목록        : GET  /new/{page}  (서버 렌더 HTML, 최신순 15개씩)
 인기 목록        : json2.dcinside.com/json1/*.php  (JSON을 괄호로 감싼 응답)
 """
 
@@ -37,6 +38,11 @@ _NAME_RE = re.compile(r'<strong[^>]*class="[^"]*dcon_name[^"]*"[^>]*>(.*?)</stro
 _SELLER_RE = re.compile(r'<span[^>]*class="[^"]*dcon_seller[^"]*"[^>]*>(.*?)</span>', re.S)
 _TOTAL_RE = re.compile(r'class="total_num"[^>]*>\s*([\d,]+)', re.S)
 _TAG_RE = re.compile(r"<[^>]+>")
+# <a href="https://dccon.dcinside.com/new/6142" class="sp_pagingicon page_end">끝</a>
+_NEW_LAST_RE = re.compile(r'/new/(\d+)"[^>]*class="[^"]*page_end')
+_NEW_PAGE_RE = re.compile(r'/new/(\d+)"')
+# 총 디시콘 <em class="font_lightblue">92,133</em>개
+_NEW_TOTAL_RE = re.compile(r'총 디시콘\s*<em[^>]*>\s*([\d,]+)')
 
 
 def _text(fragment: str) -> str:
@@ -71,6 +77,37 @@ def search_packages(
     resp = client.get(url, **kw)
     body = resp.content.decode("utf-8", errors="replace")
     return _parse_list_page(body), _parse_total_pages(body)
+
+
+def fetch_all(
+    client: DcconClient, page: int = 1, **kw
+) -> tuple[list[PackageBrief], int, int]:
+    """전체 디시콘 목록 한 페이지. (결과, 전체 페이지 수, 전체 패키지 수).
+
+    사이트의 '신규 디시콘' 목록이 곧 전체 목록이다. /hot 은 목록을 JS 로
+    그려서 HTML 에 패키지가 없다.
+    """
+    page = max(1, page)
+    resp = client.get(f"{BASE}/new/{page}", **kw)
+    body = resp.content.decode("utf-8", errors="replace")
+    rows = _parse_list_page(body)
+    # 끝을 넘어선 페이지는 비어 있다. 그 번호를 마지막 페이지로 믿으면 안 된다.
+    pages = _parse_new_pages(body, page if rows else 1)
+    return rows, pages, _parse_new_total(body)
+
+
+def _parse_new_pages(body: str, page: int) -> int:
+    last = _NEW_LAST_RE.search(body)
+    if last:
+        return max(page, int(last.group(1)))
+    # 마지막 몇 페이지에서는 '끝' 링크가 없다. 보이는 페이지 번호 중 가장 큰 것.
+    linked = [int(n) for n in _NEW_PAGE_RE.findall(body)]
+    return max([page, *linked])
+
+
+def _parse_new_total(body: str) -> int:
+    m = _NEW_TOTAL_RE.search(body)
+    return int(m.group(1).replace(",", "")) if m else 0
 
 
 def _parse_list_page(body: str) -> list[PackageBrief]:

@@ -104,6 +104,11 @@ class SettingsDialog(QDialog):
         self.reduce_motion.setChecked(settings.reduce_motion)
         form.addRow("화면 효과", self.reduce_motion)
 
+        self.animate_gifs = QCheckBox("GIF 미리보기 움직이기")
+        self.animate_gifs.setToolTip("끄면 움직이는 디시콘도 첫 장면에서 멈춰 보입니다.")
+        self.animate_gifs.setChecked(settings.animate_gifs)
+        form.addRow("", self.animate_gifs)
+
         outer.addLayout(form)
 
         # 캐시
@@ -192,5 +197,6 @@ class SettingsDialog(QDialog):
         settings.write_meta_json = self.meta.isChecked()
         settings.reduce_motion = self.reduce_motion.isChecked()
         settings.theme = self.theme_combo.currentData()
+        settings.animate_gifs = self.animate_gifs.isChecked()
         settings.check_updates = self.check_updates.isChecked()
         Path(settings.download_dir).mkdir(parents=True, exist_ok=True)

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Property, QPropertyAnimation, QRectF, QSize, Qt, Signal, QSignalBlocker, QPointF
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import (
+    Property, QBuffer, QByteArray, QIODevice, QPointF, QPropertyAnimation, QRectF,
+    QSignalBlocker, QSize, Qt, Signal,
+)
+from PySide6.QtGui import QColor, QMovie, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QCheckBox, QFrame, QLabel, QSizePolicy, QVBoxLayout
 
 from . import theme
@@ -23,6 +26,57 @@ class Preview(QLabel):
     def __init__(self):
         super().__init__("···")
         self.source = QPixmap()
+        self.movie: QMovie | None = None
+        self._gif_buffer: QBuffer | None = None
+        self._first_frame = QPixmap()
+
+    def set_gif(self, data: bytes, animated: bool) -> bool:
+        """움직이는 GIF 면 QMovie 로 튼다. GIF 로 못 읽으면 False."""
+        # QMovie 는 장치에서 프레임을 계속 읽는다. QBuffer(QByteArray) 로 넘기면
+        # 버퍼가 포인터만 들고 있어서, 카드가 지워질 때 파이썬 쪽 바이트가 먼저
+        # 풀리면 힙이 깨진다. setData 로 버퍼가 자기 사본을 갖게 한다.
+        buffer = QBuffer(self)
+        buffer.setData(QByteArray(data))
+        buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+        self._gif_buffer = buffer
+        movie = QMovie(buffer, b"gif", self)
+        # 깨진 파일도 isValid()/jumpToFrame() 은 통과할 수 있어 첫 프레임까지 본다.
+        if (not movie.isValid() or not movie.jumpToFrame(0)
+                or movie.currentPixmap().isNull()):
+            movie.deleteLater()
+            buffer.deleteLater()
+            self._gif_buffer = None
+            return False
+        self.movie = movie
+        self._first_frame = movie.currentPixmap()
+        self.set_source(self._first_frame)
+        if movie.frameCount() != 1:
+            movie.frameChanged.connect(self._on_frame)
+            self.set_animated(animated)
+        return True
+
+    def set_animated(self, animated: bool) -> None:
+        movie = self.movie
+        if movie is None or movie.frameCount() == 1:
+            return
+        # stop() 은 쓰지 않는다. GIF 는 앞으로만 읽혀서 멈춘 뒤 start() 해도
+        # 되감지 못하고 그대로 끝나 버린다. 일시정지로 멈추고, 멈춘 동안은
+        # 처음에 떠둔 첫 프레임을 보여준다.
+        state = movie.state()
+        if animated:
+            if state == QMovie.MovieState.Paused:
+                movie.setPaused(False)
+            elif state == QMovie.MovieState.NotRunning:
+                movie.start()  # 한 번도 안 튼 GIF
+        elif state == QMovie.MovieState.Running:
+            movie.setPaused(True)
+            self.set_source(self._first_frame)
+
+    def _on_frame(self, _frame: int) -> None:
+        # 화면 밖 카드는 프레임만 넘기고 다시 그리지 않는다. 패키지 하나에
+        # GIF 가 100장 넘게 있어도 보이는 것만 비용이 든다.
+        if self.movie is not None and not self.visibleRegion().isEmpty():
+            self.set_source(self.movie.currentPixmap())
 
     def set_source(self, pix):
         # Resample once on arrival, not on every hover/scroll animation frame.
@@ -49,6 +103,9 @@ class Preview(QLabel):
 
 class Card(QFrame):
     """썸네일 + 제목 + 부제. 체크박스는 선택적."""
+
+    # 설정의 'GIF 미리보기 움직이기'. 새로 만드는 카드가 따른다.
+    animate_gifs = True
 
     clicked = Signal()
     double_clicked = Signal()
@@ -156,11 +213,15 @@ class Card(QFrame):
 
     # ---- 외부에서 쓰는 것들 ---------------------------------------------
     def set_image(self, data: bytes) -> None:
+        if data[:4] == b"GIF8" and self.thumb.set_gif(data, Card.animate_gifs):
+            return
         pix = QPixmap()
-        # GIF도 loadFromData 하면 첫 프레임만 들어온다. 그리드에서는 그게 낫다.
         if not pix.loadFromData(data):
             return
         self.thumb.set_source(pix)
+
+    def set_animated(self, animated: bool) -> None:
+        self.thumb.set_animated(animated)
 
     @property
     def checked(self) -> bool:

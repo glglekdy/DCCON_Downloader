@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -48,7 +49,7 @@ from .workers import DownloadSignals, Task, ThumbSignals, ThumbTask
 from .motion import SmoothScrollArea, animate
 
 HOME_TABS = [("day", "일간 인기"), ("week", "주간 인기"),
-             ("month", "월간 인기"), ("official", "공식")]
+             ("month", "월간 인기"), ("official", "공식"), ("all", "전체")]
 
 
 class MainWindow(QMainWindow):
@@ -63,6 +64,7 @@ class MainWindow(QMainWindow):
         self.settings = Settings.load()
         from PySide6.QtWidgets import QApplication
         QApplication.instance().setProperty("reduceMotion", self.settings.reduce_motion)
+        Card.animate_gifs = self.settings.animate_gifs
         self.client = DcconClient(throttle=self._make_throttle())
         self.images = ImageCache()
         self.meta = MetaCache()
@@ -96,6 +98,7 @@ class MainWindow(QMainWindow):
         self._view = "home"
         self._home_kind = "day"
         self._search: tuple[str, str, int, int] | None = None  # word, type, page, pages
+        self._all: tuple[int, int] | None = None  # 전체 목록 page, pages
         self._package: Package | None = None
         self._history: list[tuple] = []
 
@@ -281,7 +284,10 @@ class MainWindow(QMainWindow):
         self.prev_btn = QPushButton("◀ 이전")
         self.prev_btn.clicked.connect(lambda: self._step_page(-1))
         row.addWidget(self.prev_btn)
-        self.page_label = QLabel("")
+        # 전체 목록은 6천 페이지가 넘어서 이전/다음만으로는 못 다닌다.
+        self.page_label = QPushButton("")
+        self.page_label.setToolTip("눌러서 원하는 페이지로 이동")
+        self.page_label.clicked.connect(self._jump_page)
         row.addWidget(self.page_label)
         self.next_btn = QPushButton("다음 ▶")
         self.next_btn.clicked.connect(lambda: self._step_page(1))
@@ -329,9 +335,13 @@ class MainWindow(QMainWindow):
         return self._generation
 
     def show_home(self, kind: str = "day") -> None:
+        if kind == "all":
+            self.show_all(1)
+            return
         self._view = "home"
         self._home_kind = kind
         self._search = None
+        self._all = None
         self._package = None
         self.tabs.show()
         for key, btn in self._tab_buttons.items():
@@ -344,8 +354,40 @@ class MainWindow(QMainWindow):
             lambda rows: self._fill_packages(gen, rows),
         )
 
+    def show_all(self, page: int = 1) -> None:
+        """사이트에 올라온 모든 디시콘. 최신순으로 15개씩."""
+        self._view = "home"
+        self._home_kind = "all"
+        self._search = None
+        self._package = None
+        self.tabs.show()
+        for key, btn in self._tab_buttons.items():
+            btn.setChecked(key == "all")
+        gen = self._begin_view("전체 디시콘")
+        self._set_pagination(visible=True)
+        known = self._all[1] if self._all else page
+        self._all = (page, max(page, known))
+        self._set_page_label(*self._all)
+
+        def done(payload):
+            rows, pages, total = payload
+            self._all = (page, pages)
+            self._set_page_label(page, pages)
+            if total:
+                self.view_hint.setText(
+                    f"사이트에 올라온 디시콘 {total:,}개를 최신순으로 보여줘요. "
+                    "더블클릭하면 안의 디시콘을 볼 수 있어요."
+                )
+            if not rows:
+                self._show_empty("이 페이지에는 디시콘이 없습니다.")
+                return
+            self._fill_packages(gen, rows)
+
+        self._run(lambda: api.fetch_all(self.client, page), done)
+
     def show_search(self, word: str, search_type: str = "title", page: int = 1) -> None:
         self._view = "search"
+        self._all = None
         self._package = None
         self.tabs.hide()
         gen = self._begin_view(f"“{word}” 검색 결과")
@@ -390,6 +432,8 @@ class MainWindow(QMainWindow):
         if self._view == "search" and self._search:
             word, stype, page, _ = self._search
             return ("search", word, stype, page)
+        if self._home_kind == "all" and self._all:
+            return ("all", self._all[0])
         return ("home", self._home_kind)
 
     def go_back(self) -> None:
@@ -397,18 +441,46 @@ class MainWindow(QMainWindow):
             state = self._history.pop()
             if state[0] == "search":
                 self.show_search(state[1], state[2], state[3])
+            elif state[0] == "all":
+                self.show_all(state[1])
             else:
                 self.show_home(state[1])
         else:
             self.show_home(self._home_kind)
 
+    def _current_pages(self) -> tuple[int, int] | None:
+        if self._view == "search" and self._search:
+            return self._search[2], self._search[3]
+        if self._view == "home" and self._home_kind == "all" and self._all:
+            return self._all
+        return None
+
+    def _go_page(self, target: int) -> None:
+        if self._view == "search" and self._search:
+            word, stype, _, _ = self._search
+            self.show_search(word, stype, target)
+        elif self._home_kind == "all":
+            self.show_all(target)
+
     def _step_page(self, delta: int) -> None:
-        if not self._search:
+        current = self._current_pages()
+        if not current:
             return
-        word, stype, page, pages = self._search
+        page, pages = current
         target = max(1, min(pages, page + delta))
         if target != page:
-            self.show_search(word, stype, target)
+            self._go_page(target)
+
+    def _jump_page(self) -> None:
+        current = self._current_pages()
+        if not current or current[1] <= 1:
+            return
+        page, pages = current
+        target, ok = QInputDialog.getInt(
+            self, "페이지 이동", f"이동할 페이지 (1 ~ {pages:,})", page, 1, pages
+        )
+        if ok and target != page:
+            self._go_page(target)
 
     def _set_pagination(self, visible: bool) -> None:
         for w in (self.prev_btn, self.next_btn, self.page_label):
@@ -702,6 +774,10 @@ class MainWindow(QMainWindow):
             from PySide6.QtWidgets import QApplication
             QApplication.instance().setProperty("reduceMotion", self.settings.reduce_motion)
             theme.apply(QApplication.instance(), self.settings.theme)
+            if Card.animate_gifs != self.settings.animate_gifs:
+                Card.animate_gifs = self.settings.animate_gifs
+                for card, _ in self._cards:
+                    card.set_animated(self.settings.animate_gifs)
             self.settings.save()
             self.dl_pool.setMaxThreadCount(self.settings.concurrency)
             self.thumb_pool.setMaxThreadCount(max(2, self.settings.concurrency))
