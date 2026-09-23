@@ -95,3 +95,16 @@ gh release view vX.Y.Z --repo glglekdy/DCCON_Downloader \
 `.exe` 와 `.zip` 두 자산이 있고 `digest` 가 `sha256:` 으로 채워져 있어야 한다(업데이터가 검증에 쓴다).
 사용자에게 릴리즈 URL 을 알려준다. 저장소가 아직 비공개면 자동 업데이트가 동작하지 않는다는
 점도 함께 말한다.
+
+## 7. 패치 릴리즈 정리 (자동)
+
+`X.Y.0` 은 계속 남기고, `X.Y.Z` (Z > 0) 패치 릴리즈는 **다음 릴리즈가 올라오면 자동으로 지워진다.**
+`.github/workflows/cleanup-patch-releases.yml` 이 릴리즈 publish 때 돌면서 처리하므로 손댈 것은 없다.
+
+- 방금 올린 릴리즈와 최신 릴리즈는 어떤 경우에도 지우지 않는다.
+- 릴리즈만 지우고 git 태그는 남긴다. 태그까지 지우려면 워크플로의 `gh release delete` 에
+  `--cleanup-tag` 를 붙인다.
+- 지워진 뒤에도 앱의 자동 업데이트는 `releases/latest` 만 보므로 영향이 없다.
+
+동작을 확인하고 싶으면 `gh workflow run "패치 릴리즈 정리" --repo glglekdy/DCCON_Downloader` 로
+수동 실행한다. 지울 게 없으면 전부 "보존" 으로만 찍힌다.
