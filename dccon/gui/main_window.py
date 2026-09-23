@@ -14,6 +14,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     Qt, QThreadPool, QTimer, Signal, QPropertyAnimation, QSignalBlocker,
+    QEvent,
 )
 from PySide6.QtGui import QAction, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
@@ -47,9 +48,25 @@ from .settings_dialog import SettingsDialog
 from .update_dialog import UpdateDialog
 from .workers import DownloadSignals, Task, ThumbSignals, ThumbTask
 from .motion import SmoothScrollArea, animate
+from .glow import DockShade, DownloadGlow
 
 HOME_TABS = [("day", "일간 인기"), ("week", "주간 인기"),
              ("month", "월간 인기"), ("official", "공식"), ("all", "전체")]
+
+
+class ClickableLabel(QLabel):
+    """클릭을 받는 라벨. 상단 로고를 홈 버튼으로 쓰려고 만들었다."""
+
+    clicked = Signal()
+
+    def __init__(self, text: str = "", parent=None) -> None:
+        super().__init__(text, parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class MainWindow(QMainWindow):
@@ -64,6 +81,8 @@ class MainWindow(QMainWindow):
         self.settings = Settings.load()
         from PySide6.QtWidgets import QApplication
         QApplication.instance().setProperty("reduceMotion", self.settings.reduce_motion)
+        # 마우스 4·5번 버튼은 자식 위젯이 먼저 삼키므로 앱 전역에서 가로챈다.
+        QApplication.instance().installEventFilter(self)
         Card.animate_gifs = self.settings.animate_gifs
         self.client = DcconClient(throttle=self._make_throttle())
         self.images = ImageCache()
@@ -101,6 +120,9 @@ class MainWindow(QMainWindow):
         self._all: tuple[int, int] | None = None  # 전체 목록 page, pages
         self._package: Package | None = None
         self._history: list[tuple] = []
+        self._forward: list[tuple] = []
+        # 뒤로/앞으로 복원 중에는 앞으로 스택을 비우지 않는다.
+        self._navigating = False
 
         self._cancel = threading.Event()
         self._dl_progress: dict[int, tuple[int, int]] = {}
@@ -166,10 +188,10 @@ class MainWindow(QMainWindow):
         self._title_motion.finished.connect(lambda: self._title_effect.setEnabled(False))
         root.addWidget(self.scroll, 1)
 
-        dock_space = QWidget()
+        dock_space = DockShade()
         dock_space.setObjectName("dockSpace")
         dock_margin = QVBoxLayout(dock_space)
-        dock_margin.setContentsMargins(20, 8, 20, 16)
+        dock_margin.setContentsMargins(28, 14, 28, 20)
         dock = QFrame()
         dock.setObjectName("downloadDock")
         dock_layout = QVBoxLayout(dock)
@@ -182,8 +204,32 @@ class MainWindow(QMainWindow):
         self.queue.pause_toggled.connect(self._set_paused)
         self.queue.open_folder_requested.connect(self._open_download_folder)
         dock_layout.addWidget(self.queue)
+
+        # 독 위에 붙는 손잡이. 눌러서 다운로드 바를 아래로 숨긴다.
+        handle_row = QHBoxLayout()
+        handle_row.setContentsMargins(0, 0, 0, 6)
+        handle_row.addStretch(1)
+        self.dock_toggle = QPushButton("▼")
+        self.dock_toggle.setObjectName("dockToggle")
+        self.dock_toggle.setCheckable(True)
+        self.dock_toggle.setFixedSize(52, 22)
+        self.dock_toggle.setToolTip("다운로드 바 숨기기 / 보이기")
+        self.dock_toggle.setAccessibleName("다운로드 바 숨기기 / 보이기")
+        self.dock_toggle.toggled.connect(self._toggle_dock)
+        handle_row.addWidget(self.dock_toggle)
+        handle_row.addStretch(1)
+        dock_margin.addLayout(handle_row)
         dock_margin.addWidget(dock)
+
+        self.dock = dock
+        dock_space.follow(dock)
+        self._dock_motion = QPropertyAnimation(dock, b"maximumHeight", self)
+        self._dock_motion.finished.connect(self._finish_dock_motion)
         root.addWidget(dock_space)
+
+        # 그리드 위로는 번지고 독 아래로는 깔리도록 사이에 끼운다.
+        self.glow = DownloadGlow(central)
+        self.glow.stackUnder(dock_space)
 
         self.setCentralWidget(central)
 
@@ -193,6 +239,34 @@ class MainWindow(QMainWindow):
                                          self.omnibox.selectAll()))
         self.addAction(focus)
 
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        self._place_glow()
+
+    def _place_glow(self) -> None:
+        central = self.centralWidget()
+        if central is None or not hasattr(self, "glow"):
+            return
+        height = min(DownloadGlow.HEIGHT, central.height())
+        self.glow.setGeometry(0, central.height() - height,
+                              central.width(), height)
+
+    def _toggle_dock(self, hidden: bool) -> None:
+        self._dock_motion.stop()
+        # sizeHint 는 접힌 뒤에도 원래 높이를 알려준다.
+        full = self.dock.sizeHint().height()
+        if hidden:
+            self.dock.setMaximumHeight(full)
+            animate(self._dock_motion, 0, 220)
+        else:
+            animate(self._dock_motion, full, 220)
+        self.dock_toggle.setText("▲" if hidden else "▼")
+
+    def _finish_dock_motion(self) -> None:
+        # 펼친 뒤에는 상한을 풀어야 큐 내역이 펼쳐질 때 눌리지 않는다.
+        if not self.dock_toggle.isChecked():
+            self.dock.setMaximumHeight(16777215)
+
     def _build_topbar(self) -> QWidget:
         bar = QFrame()
         bar.setObjectName("topBar")
@@ -200,24 +274,19 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(24, 18, 24, 18)
         row.setSpacing(8)
 
-        brand = QLabel("dccon")
-        mark = QLabel()
+        brand = ClickableLabel("dccon")
+        mark = ClickableLabel()
         mark.setPixmap(QPixmap(str(Path(__file__).parent / "assets" / "brand.svg")))
         mark.setFixedSize(34, 34)
         row.addWidget(mark)
         brand.setObjectName("brand")
         row.addWidget(brand)
+        # 로고가 홈 버튼을 겸한다. 뒤로/앞으로는 마우스 4·5번 버튼이 맡는다.
+        for logo in (mark, brand):
+            logo.setToolTip("홈으로")
+            logo.setAccessibleName("홈으로")
+            logo.clicked.connect(lambda: self.show_home(self._home_kind))
         row.addSpacing(12)
-        self.back_btn = QPushButton("←")
-        self.back_btn.setFixedWidth(36)
-        self.back_btn.setToolTip("뒤로")
-        self.back_btn.setAccessibleName("뒤로 가기")
-        self.back_btn.clicked.connect(self.go_back)
-        row.addWidget(self.back_btn)
-
-        self.home_btn = QPushButton("홈")
-        self.home_btn.clicked.connect(lambda: self.show_home(self._home_kind))
-        row.addWidget(self.home_btn)
 
         self.search_type = QComboBox()
         self.search_type.setMinimumWidth(84)
@@ -339,6 +408,8 @@ class MainWindow(QMainWindow):
             self.show_all(1)
             return
         self._view = "home"
+        if not self._navigating:
+            self._forward.clear()
         self._home_kind = kind
         self._search = None
         self._all = None
@@ -357,6 +428,8 @@ class MainWindow(QMainWindow):
     def show_all(self, page: int = 1) -> None:
         """사이트에 올라온 모든 디시콘. 최신순으로 15개씩."""
         self._view = "home"
+        if not self._navigating:
+            self._forward.clear()
         self._home_kind = "all"
         self._search = None
         self._package = None
@@ -387,6 +460,8 @@ class MainWindow(QMainWindow):
 
     def show_search(self, word: str, search_type: str = "title", page: int = 1) -> None:
         self._view = "search"
+        if not self._navigating:
+            self._forward.clear()
         self._all = None
         self._package = None
         self.tabs.hide()
@@ -408,8 +483,12 @@ class MainWindow(QMainWindow):
         self._run(work, done)
 
     def open_package(self, package_idx: int) -> None:
-        if self._view in ("home", "search"):
+        self._open_package(package_idx, record=True)
+
+    def _open_package(self, package_idx: int, *, record: bool = True) -> None:
+        if record and self._view in ("home", "search"):
             self._history.append(self._snapshot())
+            self._forward.clear()
         self._view = "package"
         self.tabs.hide()
         self._set_pagination(visible=False)
@@ -429,6 +508,8 @@ class MainWindow(QMainWindow):
         self._run(lambda: self._load_package(package_idx), done)
 
     def _snapshot(self) -> tuple:
+        if self._view == "package" and self._package:
+            return ("package", self._package.idx)
         if self._view == "search" and self._search:
             word, stype, page, _ = self._search
             return ("search", word, stype, page)
@@ -436,17 +517,42 @@ class MainWindow(QMainWindow):
             return ("all", self._all[0])
         return ("home", self._home_kind)
 
-    def go_back(self) -> None:
-        if self._history:
-            state = self._history.pop()
+    def _restore(self, state: tuple) -> None:
+        self._navigating = True
+        try:
             if state[0] == "search":
                 self.show_search(state[1], state[2], state[3])
             elif state[0] == "all":
                 self.show_all(state[1])
+            elif state[0] == "package":
+                self._open_package(state[1], record=False)
             else:
                 self.show_home(state[1])
-        else:
-            self.show_home(self._home_kind)
+        finally:
+            self._navigating = False
+
+    def go_back(self) -> None:
+        if not self._history:
+            return
+        self._forward.append(self._snapshot())
+        self._restore(self._history.pop())
+
+    def go_forward(self) -> None:
+        if not self._forward:
+            return
+        self._history.append(self._snapshot())
+        self._restore(self._forward.pop())
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        # 마우스 4번(뒤로) · 5번(앞으로). 브라우저와 같은 동작.
+        if event.type() == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.BackButton:
+                self.go_back()
+                return True
+            if event.button() == Qt.MouseButton.ForwardButton:
+                self.go_forward()
+                return True
+        return super().eventFilter(obj, event)
 
     def _current_pages(self) -> tuple[int, int] | None:
         if self._view == "search" and self._search:
@@ -629,6 +735,7 @@ class MainWindow(QMainWindow):
         self._dl_results.clear()
         self._dl_remaining = len(jobs)
         self.queue.start([(idx, title) for idx, title, _ in jobs])
+        self.glow.start()
         self.client.resume()
 
         for package_idx, _title, sorts in jobs:
@@ -728,11 +835,13 @@ class MainWindow(QMainWindow):
         if failed:
             summary += f", 실패 {failed}개"
         self.queue.finish(summary)
+        self.glow.stop()
 
     def _cancel_downloads(self) -> None:
         self._cancel.set()
         self.client.resume()
         self.queue.set_idle("중단하는 중…")
+        self.glow.stop()
 
     def _set_paused(self, paused: bool) -> None:
         if paused:
