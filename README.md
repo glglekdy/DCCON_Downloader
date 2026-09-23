@@ -24,6 +24,9 @@ uv run dccon-downloader
 | `https://dccon.dcinside.com/hot/1#12345` | URL에서 ID를 뽑아 열기 |
 | `12345 83649 94849` | 여러 개를 한꺼번에 큐에 넣고 바로 받기 |
 
+홈의 `전체` 탭은 사이트에 올라온 모든 디시콘(9만 개 남짓)을 최신순으로 15개씩 보여준다.
+가운데 `1 / 6142` 를 누르면 원하는 페이지로 바로 간다.
+
 그리드에서 **클릭은 선택**(패키지 통째로 받기), **더블클릭은 열기**(안의 디시콘을 골라 받기)다.
 `Ctrl+L`로 입력창에 바로 간다.
 
@@ -46,6 +49,8 @@ D:/dccon/
 
 `설정` 버튼에서 저장 폴더, 동시 다운로드 수(기본 3), 대표 이미지·`_meta.json` 저장 여부,
 그리고 캐시 용량 확인과 비우기를 할 수 있다.
+
+`GIF 미리보기 움직이기`(기본 켬)를 끄면 움직이는 디시콘도 첫 장면에서 멈춰 보인다.
 
 `테마`는 `시스템 설정 따르기`(기본) · `라이트` · `다크` 중에서 고른다. 시스템을 따르면
 윈도우에서 라이트/다크를 바꾸는 순간 앱도 같이 바뀐다. 색은 `gui/theme.py`에 토큰으로
@@ -79,6 +84,7 @@ dccon/
 | --- | --- |
 | 패키지 상세 | `POST /index/package_detail` · body `package_idx=N` · `X-Requested-With: XMLHttpRequest` |
 | 검색 | `GET /hot/{page}/{title\|nick_name\|tags}/{검색어}` — 서버 렌더 HTML |
+| 전체 목록 | `GET /new/{page}` — 서버 렌더 HTML, 최신순 15개. 마지막 페이지는 `page_end` 링크 |
 | 인기 목록 | `json2.dcinside.com/json1/dccon_{day,week,month}_top100.php` — JSON이 `(...)`로 감싸여 있음 |
 | 이미지 | `dcimg5.dcinside.com/dccon.php?no={path}` |
 
