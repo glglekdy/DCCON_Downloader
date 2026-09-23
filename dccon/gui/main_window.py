@@ -208,11 +208,15 @@ class MainWindow(QMainWindow):
         # 독 위에 붙는 손잡이. 눌러서 다운로드 바를 아래로 숨긴다.
         handle_row = QHBoxLayout()
         handle_row.setContentsMargins(0, 0, 0, 6)
+        self._handle_row = handle_row
+        self._dock_margin = dock_margin
         handle_row.addStretch(1)
         self.dock_toggle = QPushButton("▼")
         self.dock_toggle.setObjectName("dockToggle")
         self.dock_toggle.setCheckable(True)
-        self.dock_toggle.setFixedSize(52, 22)
+        # 높이는 스타일시트의 CSS 박스(내용 18 + 패딩 6 + 테두리 2)와 맞춰야
+        # 한다. 어긋나면 스타일시트가 나중에 최소 높이를 덮어써 찌그러진다.
+        self.dock_toggle.setFixedSize(56, 26)
         self.dock_toggle.setToolTip("다운로드 바 숨기기 / 보이기")
         self.dock_toggle.setAccessibleName("다운로드 바 숨기기 / 보이기")
         self.dock_toggle.toggled.connect(self._toggle_dock)
@@ -261,6 +265,10 @@ class MainWindow(QMainWindow):
         else:
             animate(self._dock_motion, full, 220)
         self.dock_toggle.setText("▲" if hidden else "▼")
+        # 접으면 손잡이만 남기고 아래 여백을 완전히 없앤다.
+        self._dock_margin.setContentsMargins(
+            28, 6 if hidden else 14, 28, 0 if hidden else 20)
+        self._handle_row.setContentsMargins(0, 0, 0, 0 if hidden else 6)
 
     def _finish_dock_motion(self) -> None:
         # 펼친 뒤에는 상한을 풀어야 큐 내역이 펼쳐질 때 눌리지 않는다.
@@ -898,6 +906,13 @@ class MainWindow(QMainWindow):
         failure = updater.take_last_error()
         if failure:
             QMessageBox.warning(self, "업데이트", failure)
+
+        # 업데이트로 갈아탄 뒤 남은 예전 버전 파일 정리.
+        # 업데이트 확인을 꺼둬도 해야 하므로 아래 guard 보다 앞에 둔다.
+        tidy = Task(updater.tidy_sibling_builds, parent=self)
+        tidy.signals.finished.connect(self._inflight.discard)
+        self._inflight.add(tidy)
+        self.nav_pool.start(tidy)
         # 소스로 돌릴 때는 조용히 넘어간다. 설정에서 직접 확인은 된다.
         if not self.settings.check_updates or updater.build_kind() is None:
             return
