@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -20,8 +21,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from .. import __version__, updater
 from ..cache import ImageCache
 from ..config import Settings
+from .theme import THEME_MODES
+from .update_dialog import UpdateDialog
+from .workers import Task
 
 
 def human_size(num: int) -> str:
@@ -40,6 +45,9 @@ class SettingsDialog(QDialog):
         self.setMinimumWidth(520)
         self._settings = settings
         self._cache = cache
+        # 업데이트를 받아뒀으면 메인 윈도우가 이걸 보고 재시작한다.
+        self.staged_update: updater.StagedUpdate | None = None
+        self._check_task: Task | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 24, 28, 24)
@@ -85,6 +93,13 @@ class SettingsDialog(QDialog):
         self.meta.setChecked(settings.write_meta_json)
         form.addRow("", self.meta)
 
+        self.theme_combo = QComboBox()
+        for key, label in THEME_MODES:
+            self.theme_combo.addItem(label, key)
+        index = self.theme_combo.findData(settings.theme)
+        self.theme_combo.setCurrentIndex(max(0, index))
+        form.addRow("테마", self.theme_combo)
+
         self.reduce_motion = QCheckBox("움직임 줄이기 (애니메이션 끄기)")
         self.reduce_motion.setChecked(settings.reduce_motion)
         form.addRow("화면 효과", self.reduce_motion)
@@ -100,6 +115,19 @@ class SettingsDialog(QDialog):
         cache_row.addWidget(clear)
         outer.addLayout(cache_row)
         self._refresh_cache_label()
+
+        # 업데이트
+        update_row = QHBoxLayout()
+        self.update_label = QLabel(f"버전 {__version__}")
+        self.update_label.setWordWrap(True)
+        self.update_button = QPushButton("업데이트 확인")
+        self.update_button.clicked.connect(self._check_update)
+        update_row.addWidget(self.update_label, 1)
+        update_row.addWidget(self.update_button)
+        outer.addLayout(update_row)
+        self.check_updates = QCheckBox("시작할 때 새 버전 확인")
+        self.check_updates.setChecked(settings.check_updates)
+        outer.addWidget(self.check_updates)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -133,10 +161,36 @@ class SettingsDialog(QDialog):
             self._cache.clear()
             self._refresh_cache_label()
 
+    def _check_update(self) -> None:
+        self.update_button.setEnabled(False)
+        self.update_label.setText(f"버전 {__version__}  ·  확인 중…")
+        task = Task(updater.fetch_latest, parent=self)
+        task.signals.done.connect(self._on_update_checked)
+        task.signals.error.connect(self._on_update_error)
+        self._check_task = task
+        QThreadPool.globalInstance().start(task)
+
+    def _on_update_checked(self, release) -> None:
+        self.update_button.setEnabled(True)
+        if release is None or not updater.is_newer(release.tag):
+            self.update_label.setText(f"버전 {__version__}  ·  최신 버전입니다")
+            return
+        self.update_label.setText(f"버전 {__version__}  ·  새 버전 {release.version} 있음")
+        dialog = UpdateDialog(release, self)
+        if dialog.exec() and dialog.staged is not None:
+            self.staged_update = dialog.staged
+            self.accept()
+
+    def _on_update_error(self, message: str) -> None:
+        self.update_button.setEnabled(True)
+        self.update_label.setText(f"버전 {__version__}  ·  {message}")
+
     def apply_to(self, settings: Settings) -> None:
         settings.download_dir = self.dir_edit.text().strip() or settings.download_dir
         settings.concurrency = self.conc_slider.value()
         settings.save_main_image = self.main_img.isChecked()
         settings.write_meta_json = self.meta.isChecked()
         settings.reduce_motion = self.reduce_motion.isChecked()
+        settings.theme = self.theme_combo.currentData()
+        settings.check_updates = self.check_updates.isChecked()
         Path(settings.download_dir).mkdir(parents=True, exist_ok=True)

@@ -6,13 +6,14 @@ from PySide6.QtCore import Property, QPropertyAnimation, QRectF, QSize, Qt, Sign
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QCheckBox, QFrame, QLabel, QSizePolicy, QVBoxLayout
 
+from . import theme
 from .motion import animate
 
 CARD_W = 180
 THUMB = 152
 
 
-def blend(first: str, second: str, amount: float) -> QColor:
+def blend(first: QColor | str, second: QColor | str, amount: float) -> QColor:
     a, b = QColor(first), QColor(second)
     return QColor(*(round(x + (y - x) * amount) for x, y in zip(
         a.getRgb(), b.getRgb())))
@@ -40,7 +41,7 @@ class Preview(QLabel):
         clip = QPainterPath()
         clip.addRoundedRect(QRectF(self.rect()), 12, 12)
         painter.setClipPath(clip)
-        painter.fillRect(self.rect(), QColor("#f2f5fa"))
+        painter.fillRect(self.rect(), theme.color("thumb_bg"))
         size = self.source.deviceIndependentSize()
         painter.drawPixmap(QPointF((self.width()-size.width())/2,
                                   (self.height()-size.height())/2), self.source)
@@ -139,12 +140,17 @@ class Card(QFrame):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         surface = QRectF(2, 5 - self._hover * 3, self.width()-4, self.height()-10)
         painter.setPen(Qt.PenStyle.NoPen)
+        shadow = theme.color("card_shadow")
+        # 어두운 바탕에서는 그림자가 묻히니 더 진하게 깐다.
+        depth = 4 if theme.is_dark() else 1
         for spread in (3, 2, 1):
-            painter.setBrush(QColor(37, 64, 112, int(3 + self._hover * 4)))
+            shadow.setAlpha(int((3 + self._hover * 4) * depth))
+            painter.setBrush(shadow)
             painter.drawRoundedRect(surface.adjusted(-spread/2, 2, spread/2, spread+2), 16, 16)
-        painter.setBrush(blend("#ffffff", "#eaf1ff", self._selection))
-        border = blend("#e0e7f1", "#a6bce5", self._hover)
-        border = blend(border.name(), "#315fbc", self._selection)
+        painter.setBrush(blend(theme.color("card_bg"), theme.color("card_selected_bg"),
+                               self._selection))
+        border = blend(theme.color("card_border"), theme.color("card_hover_border"), self._hover)
+        border = blend(border, theme.color("accent"), self._selection)
         painter.setPen(QPen(border, 1 + self._selection))
         painter.drawRoundedRect(surface, 15, 15)
 

@@ -6,8 +6,8 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from .config import DATA_DIR
-from .gui.theme import STYLE
+from .config import DATA_DIR, Settings
+from .gui import theme
 
 
 def main() -> int:
@@ -16,7 +16,8 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("디시콘 다운로더")
     app.setStyle("Fusion")
-    app.setStyleSheet(STYLE)
+    # 창이 뜨기 전에 입혀야 흰 화면이 번쩍이지 않는다.
+    theme.apply(app, Settings.load().theme)
 
     # import를 늦춰서 QApplication이 먼저 만들어지게 한다.
     from .gui.main_window import MainWindow
