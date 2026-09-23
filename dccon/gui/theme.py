@@ -20,6 +20,8 @@ THEME_MODES = [("system", "시스템 설정 따르기"), ("light", "라이트"),
 
 LIGHT = {
     "bg": "#f3f6fb",
+    "glow": "#6c74e0",
+    "dock_shadow": "#254070",
     "text": "#26354b",
     "heading": "#1c2d49",
     "muted": "#65748b",
@@ -85,6 +87,8 @@ LIGHT = {
 
 DARK = {
     "bg": "#11161f",
+    "glow": "#8f9cff",
+    "dock_shadow": "#000000",
     "text": "#dbe3ef",
     "heading": "#eef2f8",
     "muted": "#8d9ab0",
@@ -188,7 +192,9 @@ QPushButton#primary, QPushButton#searchButton {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #316bd3, stop:1 #6554be);
     border-color: #4b67bf; color: white; font-weight: 700;
 }
-QPushButton#primary { padding: 10px 22px; }
+QPushButton#primary {
+    padding: 12px 26px; border-radius: 12px; font-size: 14px; min-width: 134px;
+}
 QPushButton#primary:hover, QPushButton#searchButton:hover {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #285cc0, stop:1 #5544ad);
 }
@@ -220,7 +226,13 @@ QCheckBox::indicator { width: 18px; height: 18px; }
 QCheckBox::indicator:unchecked { background: $check_bg; border: 1px solid $check_border; border-radius: 5px; }
 QCheckBox::indicator:checked { background: $accent; border: 1px solid $accent; border-radius: 5px; image: url("$check_icon"); }
 QCheckBox::indicator:hover, QCheckBox::indicator:focus { border: 1px solid $focus; }
-#dockSpace { background: $bg; }
+/* 다운로드 글로우가 독 주위로 비쳐야 해서 바탕을 깔지 않는다. */
+#dockSpace { background: transparent; }
+#dockToggle {
+    background: $btn_bg; border: 1px solid $dock_border; border-radius: 11px;
+    color: $text; font-size: 11px; padding: 0;
+}
+#dockToggle:hover, #dockToggle:focus { border-color: $focus; }
 #downloadDock {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 $dock_0, stop:0.55 $dock_1, stop:1 $dock_2);
     border: 1px solid $dock_border; border-bottom: 3px solid $dock_bottom; border-radius: 20px;

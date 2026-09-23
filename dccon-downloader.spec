@@ -70,7 +70,7 @@ a = Analysis(
     ["run.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[("dccon/gui/assets", "dccon/gui/assets")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
