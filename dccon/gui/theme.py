@@ -229,8 +229,8 @@ QCheckBox::indicator:hover, QCheckBox::indicator:focus { border: 1px solid $focu
 /* 다운로드 글로우가 독 주위로 비쳐야 해서 바탕을 깔지 않는다. */
 #dockSpace { background: transparent; }
 #dockToggle {
-    background: $btn_bg; border: 1px solid $dock_border; border-radius: 11px;
-    color: $text; font-size: 11px; padding: 0;
+    background: $btn_bg; border: 1px solid $dock_border; border-radius: 13px;
+    color: $text; font-size: 11px; padding: 3px 0;
 }
 #dockToggle:hover, #dockToggle:focus { border-color: $focus; }
 #downloadDock {

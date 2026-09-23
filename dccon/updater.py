@@ -376,6 +376,89 @@ def take_last_error() -> str | None:
     return text or None
 
 
+_BUILD_NAME = re.compile(r"^dccon-downloader-(\d+\.\d+\.\d+)-win64\.exe$",
+                         re.IGNORECASE)
+
+
+def _recycle(path: Path) -> bool:
+    """휴지통으로 보낸다. 사용자 파일이라 완전 삭제는 하지 않는다."""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    class SHFILEOPSTRUCTW(ctypes.Structure):
+        _fields_ = [
+            ("hwnd", wintypes.HWND),
+            ("wFunc", wintypes.UINT),
+            ("pFrom", wintypes.LPCWSTR),
+            ("pTo", wintypes.LPCWSTR),
+            ("fFlags", ctypes.c_uint16),
+            ("fAnyOperationsAborted", wintypes.BOOL),
+            ("hNameMappings", ctypes.c_void_p),
+            ("lpszProgressTitle", wintypes.LPCWSTR),
+        ]
+
+    FO_DELETE = 3
+    FOF_SILENT = 0x0004
+    FOF_NOCONFIRMATION = 0x0010
+    FOF_ALLOWUNDO = 0x0040        # 이게 휴지통으로 보내는 플래그다
+    FOF_NOERRORUI = 0x0400
+
+    op = SHFILEOPSTRUCTW()
+    op.wFunc = FO_DELETE
+    # pFrom 은 널로 끝나는 목록이라 끝에 널이 하나 더 붙어야 한다.
+    op.pFrom = str(path) + "\0\0"
+    op.fFlags = FOF_SILENT | FOF_NOCONFIRMATION | FOF_ALLOWUNDO | FOF_NOERRORUI
+    try:
+        return ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op)) == 0
+    except OSError:
+        return False
+
+
+def tidy_sibling_builds() -> list[str]:
+    """업데이트로 갈아탄 뒤 남은 예전 버전 exe 를 치운다.
+
+    onefile 은 실행 중이던 exe 를 그 이름 그대로 덮어쓴다. 그래서
+    dccon-downloader-1.1.0-win64.exe 를 받아 쓰던 사람은 1.2.0 이 들어간
+    뒤에도 파일명이 1.1.0 으로 남는다. 이름을 지금 버전에 맞추고, 같은
+    폴더에 남은 더 낮은 버전은 휴지통으로 보낸다.
+
+    릴리즈 자산 이름 형식에 정확히 맞는 파일만 건드린다. 사용자가 직접
+    이름을 붙인 exe 는 형식이 달라 걸리지 않는다.
+    """
+    if build_kind() != "onefile":
+        return []
+    exe = Path(sys.executable).resolve()
+    folder = exe.parent
+
+    # 1) 실행 파일 이름을 지금 버전에 맞춘다.
+    #    윈도우는 실행 중인 exe 도 이름 바꾸기는 허용한다(삭제만 막는다).
+    match = _BUILD_NAME.match(exe.name)
+    if match and match.group(1) != __version__:
+        target = folder / f"dccon-downloader-{__version__}-win64.exe"
+        try:
+            if target.exists():
+                # 같은 이름이 이미 있으면 그건 지금 우리와 같은 버전이다.
+                _recycle(target)
+            if not target.exists():
+                exe.rename(target)
+                exe = target
+        except OSError:
+            pass  # 이름은 못 바꿔도 아래 정리는 계속한다.
+
+    # 2) 같은 폴더의 더 낮은 버전을 휴지통으로.
+    removed: list[str] = []
+    here = parse_version(__version__)
+    for entry in sorted(folder.glob("dccon-downloader-*-win64.exe")):
+        found = _BUILD_NAME.match(entry.name)
+        if not found or entry.resolve() == exe:
+            continue
+        if parse_version(found.group(1)) < here and _recycle(entry):
+            removed.append(entry.name)
+    return removed
+
+
 def cleanup_staging() -> None:
     """적용이 끝난 스테이징 폴더를 치운다. 로그는 남긴다."""
     if not UPDATE_DIR.is_dir():
