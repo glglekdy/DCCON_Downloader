@@ -12,7 +12,9 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool, Signal, QPropertyAnimation, QSignalBlocker
+from PySide6.QtCore import (
+    Qt, QThreadPool, QTimer, Signal, QPropertyAnimation, QSignalBlocker,
+)
 from PySide6.QtGui import QAction, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
@@ -30,16 +32,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import api
+from .. import api, updater
 from ..cache import ImageCache, MetaCache, cache_key
 from ..client import CancelledError, DcconClient, Throttle
 from ..config import Settings
 from ..downloader import download_package
 from ..models import Package, PackageBrief
+from . import theme
 from .cards import Card
 from .flowlayout import FlowLayout
 from .queuebar import QueueBar
 from .settings_dialog import SettingsDialog
+from .update_dialog import UpdateDialog
 from .workers import DownloadSignals, Task, ThumbSignals, ThumbTask
 from .motion import SmoothScrollArea, animate
 
@@ -102,6 +106,8 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self.show_home(self._home_kind)
+        # 첫 화면 요청이 먼저 나가도록 조금 늦춘다.
+        QTimer.singleShot(1500, self._startup_update_check)
 
     # ------------------------------------------------------------------ UI
     def _make_throttle(self) -> Throttle:
@@ -695,9 +701,61 @@ class MainWindow(QMainWindow):
             dialog.apply_to(self.settings)
             from PySide6.QtWidgets import QApplication
             QApplication.instance().setProperty("reduceMotion", self.settings.reduce_motion)
+            theme.apply(QApplication.instance(), self.settings.theme)
             self.settings.save()
             self.dl_pool.setMaxThreadCount(self.settings.concurrency)
             self.thumb_pool.setMaxThreadCount(max(2, self.settings.concurrency))
+        if dialog.staged_update is not None:
+            self._apply_update(dialog.staged_update)
+
+    # ---------------------------------------------------------- 업데이트
+    def _startup_update_check(self) -> None:
+        failure = updater.take_last_error()
+        if failure:
+            QMessageBox.warning(self, "업데이트", failure)
+        # 소스로 돌릴 때는 조용히 넘어간다. 설정에서 직접 확인은 된다.
+        if not self.settings.check_updates or updater.build_kind() is None:
+            return
+
+        def work():
+            updater.cleanup_staging()
+            return updater.fetch_latest()
+
+        task = Task(work, parent=self)
+        task.signals.done.connect(self._on_startup_release)
+        # 시작할 때 확인은 실패해도 알리지 않는다. 오프라인일 수도 있다.
+        task.signals.finished.connect(self._inflight.discard)
+        self._inflight.add(task)
+        self.nav_pool.start(task)
+
+    def _on_startup_release(self, release) -> None:
+        if release is None or not updater.is_newer(release.tag):
+            return
+        if release.version == self.settings.skipped_version:
+            return
+        dialog = UpdateDialog(release, self, offer_skip=True)
+        if dialog.exec() and dialog.staged is not None:
+            self._apply_update(dialog.staged)
+        elif dialog.skipped:
+            self.settings.skipped_version = release.version
+            self.settings.save()
+
+    def _apply_update(self, staged) -> None:
+        if self._dl_remaining > 0:
+            confirm = QMessageBox.question(
+                self, "업데이트",
+                "다운로드가 진행 중입니다. 중단하고 다시 시작할까요?\n"
+                "받다 만 패키지는 다음에 다시 받으면 빠진 것만 채워집니다.",
+            )
+            if confirm != QMessageBox.StandardButton.Yes:
+                return
+        try:
+            updater.launch_apply(staged)
+        except (OSError, updater.UpdateError) as exc:
+            QMessageBox.warning(self, "업데이트", f"업데이트를 시작하지 못했습니다.\n{exc}")
+            return
+        # 도우미가 이 프로세스가 끝나기를 기다리고 있다.
+        self.close()
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self._cancel.set()

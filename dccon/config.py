@@ -36,6 +36,9 @@ class Settings:
     save_main_image: bool = True
     write_meta_json: bool = True
     reduce_motion: bool = False
+    theme: str = "system"  # system / light / dark
+    check_updates: bool = True
+    skipped_version: str = ""
     recent_packages: list[int] = field(default_factory=list)
 
     @classmethod
