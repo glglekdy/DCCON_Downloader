@@ -38,7 +38,8 @@ GitHub 릴리즈를 올릴 때는 `release` 스킬(`.claude/skills/release/SKILL
 
 ## 알아둘 것
 
-- 저장소 `glglekdy/DCCON_Downloader` 는 현재 **비공개**다. 앱의 업데이트 확인은 인증 없이
-  GitHub API 를 부르므로, 비공개인 동안은 새 릴리즈를 못 보고 항상 "최신 버전"이라고 한다.
+- 저장소 `glglekdy/DCCON_Downloader` 는 **공개**다. 앱의 업데이트 확인은 인증 없이
+  GitHub API 를 부르므로 그대로 동작한다. 비공개로 돌리면 기존 사용자가 새 릴리즈를
+  못 보고 항상 "최신 버전"이라고 하게 되니 주의.
 - 빌드 산출물과 릴리즈용 파일은 저장소 밖(`dist/` 는 gitignore 됨)에 둔다. 저장소 루트에
   `release/` 같은 폴더를 만들어 커밋하지 않는다.
