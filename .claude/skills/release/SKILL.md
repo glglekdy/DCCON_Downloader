@@ -48,16 +48,18 @@ import pathlib, shutil, zipfile
 ver = "X.Y.Z"
 out = pathlib.Path("dist/release"); shutil.rmtree(out, ignore_errors=True); out.mkdir()
 src = pathlib.Path("dist/dccon-downloader")
-with zipfile.ZipFile(out / f"디시콘 다운로더 {ver}.zip", "w",
+with zipfile.ZipFile(out / f"dccon-downloader-{ver}.zip", "w",
                      zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
     for p in sorted(src.rglob("*")):
         if p.is_file():
             zf.write(p, pathlib.Path("dccon-downloader") / p.relative_to(src))
-shutil.copy("dist/dccon-downloader.exe", out / f"디시콘 다운로더 {ver}.exe")
+shutil.copy("dist/dccon-downloader.exe", out / f"dccon-downloader-{ver}.exe")
 EOF
 ```
 
-자산 이름은 `디시콘 다운로더 X.Y.Z.exe` / `.zip` 이다. 업데이터는 확장자로 고르므로
+자산 이름은 `dccon-downloader-X.Y.Z.exe` / `.zip` 이다. **한글을 쓰지 말 것** -
+깃허브가 자산 이름에서 비ASCII 를 지워 `1.2.2.exe` 같은 이름이 되어 버린다.
+앱 이름은 exe 의 버전 리소스가 들고 있으므로 파일명까지 한글일 필요는 없다. 업데이터는 확장자로 고르므로
 이름 자체는 자유롭지만, `updater.release_name()` 과 맞춰야 옛 파일 정리가 동작한다.
 zip **안쪽**은 `dccon-downloader/` 폴더 하나로 감싸고 그 안에 exe 와 `_internal/` 이 있어야 한다.
 업데이터가 실제로 쓰는 검사로 확인한다:
@@ -79,8 +81,8 @@ shutil.rmtree('dist/check')"
 ```bash
 gh release create vX.Y.Z --repo glglekdy/DCCON_Downloader --target main \
   --title "vX.Y.Z" --notes-file <노트파일> \
-  "dist/release/디시콘 다운로더 X.Y.Z.exe" \
-  "dist/release/디시콘 다운로더 X.Y.Z.zip"
+  dist/release/dccon-downloader-X.Y.Z.exe \
+  dist/release/dccon-downloader-X.Y.Z.zip
 ```
 
 - `--draft` / `--prerelease` 를 붙이면 앱이 못 본다(`releases/latest` 에서 빠진다).
