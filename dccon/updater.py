@@ -376,15 +376,14 @@ def take_last_error() -> str | None:
     return text or None
 
 
-# 릴리즈 자산 이름. 예전에는 dccon-downloader-1.2.1-win64.exe 였는데
-# 탐색기에 뜨는 이름이 너무 길어 1.2.2 부터 아래 형식으로 바꿨다.
-# 이미 받아 둔 파일도 정리해야 하므로 두 형식을 다 알아본다.
+# 릴리즈 자산 이름. 1.2.2 까지는 -win64 가 붙어 탐색기에 뜨는 이름이 길었다.
+# 한글 이름도 시도했지만 깃허브가 자산 이름에서 비ASCII 를 지워버린다
+# ("디시콘 다운로더 1.2.2.exe" -> "1.2.2.exe"). 그래서 ASCII 로 줄였다.
+# 앱 이름 자체는 exe 의 버전 리소스(FileDescription)가 들고 있다.
+# 이미 받아 둔 옛 파일도 정리해야 하므로 -win64 가 붙은 것도 알아본다.
 _BUILD_NAME = re.compile(
-    r"^(?:dccon-downloader-(\d+\.\d+\.\d+)-win64"
-    r"|디시콘 다운로더 (\d+\.\d+\.\d+))\.exe$",
-    re.IGNORECASE,
-)
-_BUILD_GLOBS = ("dccon-downloader-*-win64.exe", "디시콘 다운로더 *.exe")
+    r"^dccon-downloader-(\d+\.\d+\.\d+)(?:-win64)?\.exe$", re.IGNORECASE)
+_BUILD_GLOBS = ("dccon-downloader-*.exe",)
 
 
 def release_name(version: str | None = None) -> str:
@@ -393,15 +392,13 @@ def release_name(version: str | None = None) -> str:
     기본 인자에 __version__ 을 직접 두면 정의 시점 값이 굳어버린다.
     호출할 때 읽도록 None 을 받는다.
     """
-    return f"디시콘 다운로더 {version or __version__}.exe"
+    return f"dccon-downloader-{version or __version__}.exe"
 
 
 def _named_version(name: str) -> str | None:
     """파일 이름에서 버전을 뽑는다. 우리 자산 형식이 아니면 None."""
     found = _BUILD_NAME.match(name)
-    if not found:
-        return None
-    return found.group(1) or found.group(2)
+    return found.group(1) if found else None
 
 
 def _recycle(path: Path) -> bool:
