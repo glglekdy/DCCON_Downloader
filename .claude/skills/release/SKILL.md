@@ -97,7 +97,8 @@ gh release view vX.Y.Z --repo glglekdy/DCCON_Downloader \
 ```
 
 `.exe` 와 `.zip` 두 자산이 있고 `digest` 가 `sha256:` 으로 채워져 있어야 한다(업데이터가 검증에 쓴다).
-사용자에게 릴리즈 URL 을 알려준다. 저장소가 아직 비공개면 자동 업데이트가 동작하지 않는다는
+사용자에게 릴리즈 URL 을 알려준다. 저장소 공개 여부는 문서를 믿지 말고
+`gh repo view --json visibility` 로 확인한다. 비공개면 자동 업데이트가 동작하지 않는다는
 점도 함께 말한다.
 
 ## 7. 패치 릴리즈 정리 (자동)
