@@ -376,8 +376,32 @@ def take_last_error() -> str | None:
     return text or None
 
 
-_BUILD_NAME = re.compile(r"^dccon-downloader-(\d+\.\d+\.\d+)-win64\.exe$",
-                         re.IGNORECASE)
+# 릴리즈 자산 이름. 예전에는 dccon-downloader-1.2.1-win64.exe 였는데
+# 탐색기에 뜨는 이름이 너무 길어 1.2.2 부터 아래 형식으로 바꿨다.
+# 이미 받아 둔 파일도 정리해야 하므로 두 형식을 다 알아본다.
+_BUILD_NAME = re.compile(
+    r"^(?:dccon-downloader-(\d+\.\d+\.\d+)-win64"
+    r"|디시콘 다운로더 (\d+\.\d+\.\d+))\.exe$",
+    re.IGNORECASE,
+)
+_BUILD_GLOBS = ("dccon-downloader-*-win64.exe", "디시콘 다운로더 *.exe")
+
+
+def release_name(version: str | None = None) -> str:
+    """릴리즈에 올리는 단일 exe 이름.
+
+    기본 인자에 __version__ 을 직접 두면 정의 시점 값이 굳어버린다.
+    호출할 때 읽도록 None 을 받는다.
+    """
+    return f"디시콘 다운로더 {version or __version__}.exe"
+
+
+def _named_version(name: str) -> str | None:
+    """파일 이름에서 버전을 뽑는다. 우리 자산 형식이 아니면 None."""
+    found = _BUILD_NAME.match(name)
+    if not found:
+        return None
+    return found.group(1) or found.group(2)
 
 
 def _recycle(path: Path) -> bool:
@@ -432,11 +456,12 @@ def tidy_sibling_builds() -> list[str]:
     exe = Path(sys.executable).resolve()
     folder = exe.parent
 
-    # 1) 실행 파일 이름을 지금 버전에 맞춘다.
-    #    윈도우는 실행 중인 exe 도 이름 바꾸기는 허용한다(삭제만 막는다).
-    match = _BUILD_NAME.match(exe.name)
-    if match and match.group(1) != __version__:
-        target = folder / f"dccon-downloader-{__version__}-win64.exe"
+    # 1) 실행 파일 이름을 지금 버전·형식에 맞춘다. 버전이 같아도 예전
+    #    이름이면 새 이름으로 옮긴다. 윈도우는 실행 중인 exe 도 이름
+    #    바꾸기는 허용한다(삭제만 막는다).
+    wanted = release_name()
+    if _named_version(exe.name) and exe.name != wanted:
+        target = folder / wanted
         try:
             if target.exists():
                 # 같은 이름이 이미 있으면 그건 지금 우리와 같은 버전이다.
@@ -450,12 +475,17 @@ def tidy_sibling_builds() -> list[str]:
     # 2) 같은 폴더의 더 낮은 버전을 휴지통으로.
     removed: list[str] = []
     here = parse_version(__version__)
-    for entry in sorted(folder.glob("dccon-downloader-*-win64.exe")):
-        found = _BUILD_NAME.match(entry.name)
-        if not found or entry.resolve() == exe:
-            continue
-        if parse_version(found.group(1)) < here and _recycle(entry):
-            removed.append(entry.name)
+    seen: set[Path] = set()
+    for pattern in _BUILD_GLOBS:
+        for entry in sorted(folder.glob(pattern)):
+            if entry in seen:
+                continue
+            seen.add(entry)
+            found = _named_version(entry.name)
+            if not found or entry.resolve() == exe:
+                continue
+            if parse_version(found) < here and _recycle(entry):
+                removed.append(entry.name)
     return removed
 
 

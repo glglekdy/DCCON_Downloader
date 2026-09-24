@@ -12,6 +12,18 @@
 """
 
 import os
+import re
+from pathlib import Path
+
+from PyInstaller.utils.win32.versioninfo import (
+    FixedFileInfo,
+    StringFileInfo,
+    StringStruct,
+    StringTable,
+    VarFileInfo,
+    VarStruct,
+    VSVersionInfo,
+)
 
 ONEFILE = os.environ.get("DCCON_ONEFILE") == "1"
 CONSOLE = os.environ.get("DCCON_CONSOLE") == "1"
@@ -66,6 +78,35 @@ def _keep_data(entry):
     return not any(token in name for token in DROP_DATA_DIRS)
 
 
+# 윈도우 버전 리소스. 이게 없으면 작업 관리자와 속성 창이 파일명을 그대로
+# 앱 이름으로 쓴다. 버전은 dccon/__init__.py 한 곳에서만 고치면 되도록
+# 여기서 읽는다(패키지를 import 하면 PySide6 까지 딸려와 빌드가 느려진다).
+_version_text = re.search(
+    r'^__version__ = "([^"]+)"',
+    Path("dccon/__init__.py").read_text(encoding="utf-8"),
+    re.M,
+).group(1)
+_numbers = (tuple(int(p) for p in _version_text.split(".")) + (0, 0, 0, 0))[:4]
+
+VERSION_RESOURCE = VSVersionInfo(
+    ffi=FixedFileInfo(filevers=_numbers, prodvers=_numbers,
+                      mask=0x3F, flags=0x0, OS=0x40004, fileType=0x1,
+                      subtype=0x0, date=(0, 0)),
+    kids=[
+        # 0412 = 한국어, 04B0 = 1200 = 유니코드
+        StringFileInfo([StringTable("041204B0", [
+            StringStruct("CompanyName", "디시콘 다운로더"),
+            StringStruct("FileDescription", "디시콘 다운로더"),
+            StringStruct("FileVersion", _version_text),
+            StringStruct("InternalName", "dccon-downloader"),
+            StringStruct("OriginalFilename", "dccon-downloader.exe"),
+            StringStruct("ProductName", "디시콘 다운로더"),
+            StringStruct("ProductVersion", _version_text),
+        ])]),
+        VarFileInfo([VarStruct("Translation", [0x0412, 1200])]),
+    ],
+)
+
 a = Analysis(
     ["run.py"],
     pathex=[],
@@ -103,6 +144,7 @@ _common = dict(
     codesign_identity=None,
     entitlements_file=None,
     icon="assets/icon.ico",
+    version=VERSION_RESOURCE,
 )
 
 if ONEFILE:
