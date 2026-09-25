@@ -59,8 +59,8 @@ EOF
 
 자산 이름은 `dccon-downloader-X.Y.Z.exe` / `.zip` 이다. **한글을 쓰지 말 것** -
 깃허브가 자산 이름에서 비ASCII 를 지워 `1.2.2.exe` 같은 이름이 되어 버린다.
-받은 exe 는 처음 실행될 때 스스로 `디시콘 다운로더 X.Y.Z.exe` 로 이름을 바꾼다
-(`updater.local_name()`). 업데이터는 확장자로 고르므로 이름 자체는 자유롭지만,
+받은 exe 는 처음 실행될 때 스스로 `디시콘 다운로더.exe` 로 이름을 바꾼다
+(`updater.LOCAL_NAME`). 업데이터는 확장자로 고르므로 이름 자체는 자유롭지만,
 `updater.release_name()` 과 맞춰야 이름 바꾸기와 옛 파일 정리가 동작한다.
 zip **안쪽**은 `dccon-downloader/` 폴더 하나로 감싸고 그 안에 exe 와 `_internal/` 이 있어야 한다.
 업데이터가 실제로 쓰는 검사로 확인한다:

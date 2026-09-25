@@ -176,32 +176,64 @@ class BuildKindTests(unittest.TestCase):
 
 
 class LocalNameTests(unittest.TestCase):
-    def test_versions_from_every_name_form(self):
+    def test_version_from_release_names(self):
         self.assertEqual(updater._named_version("dccon-downloader-1.2.3.exe"), "1.2.3")
         self.assertEqual(updater._named_version("dccon-downloader-1.1.0-win64.exe"), "1.1.0")
-        self.assertEqual(updater._named_version("디시콘 다운로더 1.2.4.exe"), "1.2.4")
+        self.assertIsNone(updater._named_version(updater.LOCAL_NAME))
         self.assertIsNone(updater._named_version("내 디시콘.exe"))
 
-    def test_downloaded_exe_renames_itself_and_recycles_older(self):
+    @unittest.skipUnless(sys.platform == "win32", "윈도우 버전 리소스")
+    def test_reads_version_resource(self):
+        # venv 의 python.exe 는 버전 리소스가 없는 런처라 원본을 본다.
+        # 파이썬은 세 번째 자리에 빌드 번호를 섞으므로 앞 두 자리만 맞춘다.
+        found = updater._exe_version(Path(sys._base_executable))
+        self.assertTrue(found.startswith("{}.{}.".format(*sys.version_info[:2])), found)
+        self.assertIsNone(updater._exe_version(Path(__file__)))
+
+    def tidy(self, folder, exe, version, installed=None):
+        """folder 에서 exe 를 version 으로 실행한 것처럼 정리를 돌린다."""
+        recycled = []
+
+        def fake_recycle(path):
+            recycled.append(path.name)
+            path.unlink()
+            return True
+
+        with patch.object(updater, "build_kind", return_value="onefile"),              patch.object(updater, "__version__", version),              patch.object(updater, "_recycle", fake_recycle),              patch.object(updater, "_exe_version", return_value=installed),              patch.object(sys, "executable", str(exe)):
+            updater.tidy_sibling_builds()
+        return sorted(p.name for p in folder.iterdir()), recycled
+
+    def test_downloaded_exe_takes_local_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             exe = folder / updater.release_name("9.0.0")
             exe.write_bytes(b"new")
-            (folder / "디시콘 다운로더 8.0.0.exe").write_bytes(b"old")
+            (folder / "dccon-downloader-8.0.0-win64.exe").write_bytes(b"old")
             (folder / "내 디시콘.exe").write_bytes(b"mine")
-            recycled = []
+            names, recycled = self.tidy(folder, exe, "9.0.0")
+            self.assertEqual(names, ["내 디시콘.exe", updater.LOCAL_NAME])
+            self.assertEqual(recycled, ["dccon-downloader-8.0.0-win64.exe"])
 
-            def fake_recycle(path):
-                recycled.append(path.name)
-                path.unlink()
-                return True
+    def test_replaces_older_local_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            exe = folder / updater.release_name("9.0.0")
+            exe.write_bytes(b"new")
+            (folder / updater.LOCAL_NAME).write_bytes(b"old")
+            names, recycled = self.tidy(folder, exe, "9.0.0", installed="8.0.0")
+            self.assertEqual(names, [updater.LOCAL_NAME])
+            self.assertEqual((folder / updater.LOCAL_NAME).read_bytes(), b"new")
+            self.assertEqual(recycled, [updater.LOCAL_NAME])
 
-            with patch.object(updater, "build_kind", return_value="onefile"),                  patch.object(updater, "__version__", "9.0.0"),                  patch.object(updater, "_recycle", fake_recycle),                  patch.object(sys, "executable", str(exe)):
-                updater.tidy_sibling_builds()
-
-            names = sorted(p.name for p in folder.iterdir())
-            self.assertEqual(names, ["내 디시콘.exe", "디시콘 다운로더 9.0.0.exe"])
-            self.assertEqual(recycled, ["디시콘 다운로더 8.0.0.exe"])
+    def test_keeps_newer_local_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            exe = folder / updater.release_name("8.0.0")
+            exe.write_bytes(b"old")
+            (folder / updater.LOCAL_NAME).write_bytes(b"new")
+            names, recycled = self.tidy(folder, exe, "8.0.0", installed="9.0.0")
+            self.assertEqual(names, [updater.release_name("8.0.0"), updater.LOCAL_NAME])
+            self.assertEqual(recycled, [])
 
 
 if __name__ == "__main__":
