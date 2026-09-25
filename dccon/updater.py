@@ -379,36 +379,64 @@ def take_last_error() -> str | None:
 # 릴리즈 자산 이름은 dccon-downloader-X.Y.Z.exe 다. 한글 이름도 시도했지만
 # 깃허브가 자산 이름에서 비ASCII 를 지워버린다
 # ("디시콘 다운로더 1.2.2.exe" -> "1.2.2.exe"). 그래서 올릴 때는 ASCII 로 두고,
-# 받은 exe 가 처음 실행될 때 자기 이름을 "디시콘 다운로더 X.Y.Z.exe" 로 바꾼다.
+# 받은 exe 가 처음 실행될 때 자기 이름을 LOCAL_NAME 으로 바꾼다.
 # 이미 받아 둔 옛 파일도 정리해야 하므로 -win64 가 붙은 것도 알아본다.
 _BUILD_NAME = re.compile(
-    r"^(?:dccon-downloader-(\d+\.\d+\.\d+)(?:-win64)?"
-    r"|디시콘 다운로더 (\d+\.\d+\.\d+))\.exe$",
-    re.IGNORECASE,
-)
-_BUILD_GLOBS = ("dccon-downloader-*.exe", "디시콘 다운로더 *.exe")
+    r"^dccon-downloader-(\d+\.\d+\.\d+)(?:-win64)?\.exe$", re.IGNORECASE)
+_BUILD_GLOBS = ("dccon-downloader-*.exe",)
+
+# 받은 단일 exe 가 실행된 뒤 스스로 붙이는 이름. 버전이 없으므로 같은
+# 이름의 파일이 있으면 exe 안의 버전 리소스를 읽어 비교한다.
+LOCAL_NAME = "디시콘 다운로더.exe"
 
 
 def release_name(version: str | None = None) -> str:
-    """깃허브 릴리즈에 올리는 단일 exe 이름."""
-    return f"dccon-downloader-{version or __version__}.exe"
-
-
-def local_name(version: str | None = None) -> str:
-    """받은 단일 exe 가 실행된 뒤 스스로 붙이는 이름.
+    """깃허브 릴리즈에 올리는 단일 exe 이름.
 
     기본 인자에 __version__ 을 직접 두면 정의 시점 값이 굳어버린다.
     호출할 때 읽도록 None 을 받는다.
     """
-    return f"디시콘 다운로더 {version or __version__}.exe"
+    return f"dccon-downloader-{version or __version__}.exe"
 
 
 def _named_version(name: str) -> str | None:
     """파일 이름에서 버전을 뽑는다. 우리 자산 형식이 아니면 None."""
     found = _BUILD_NAME.match(name)
-    if not found:
+    return found.group(1) if found else None
+
+
+def _exe_version(path: Path) -> str | None:
+    """exe 의 버전 리소스(FileVersion)를 X.Y.Z 로 읽는다. 못 읽으면 None."""
+    if sys.platform != "win32":
         return None
-    return found.group(1) or found.group(2)
+    import ctypes
+    from ctypes import wintypes
+
+    class VS_FIXEDFILEINFO(ctypes.Structure):
+        _fields_ = [(name, wintypes.DWORD) for name in (
+            "dwSignature", "dwStrucVersion", "dwFileVersionMS",
+            "dwFileVersionLS", "dwProductVersionMS", "dwProductVersionLS",
+            "dwFileFlagsMask", "dwFileFlags", "dwFileOS", "dwFileType",
+            "dwFileSubtype", "dwFileDateMS", "dwFileDateLS")]
+
+    try:
+        api = ctypes.windll.version
+        size = api.GetFileVersionInfoSizeW(str(path), None)
+        if not size:
+            return None
+        data = ctypes.create_string_buffer(size)
+        if not api.GetFileVersionInfoW(str(path), 0, size, data):
+            return None
+        info = ctypes.c_void_p()
+        length = wintypes.UINT()
+        if not api.VerQueryValueW(data, "\\", ctypes.byref(info),
+                                  ctypes.byref(length)) or not info.value:
+            return None
+        fixed = VS_FIXEDFILEINFO.from_address(info.value)
+    except OSError:
+        return None
+    ms, ls = fixed.dwFileVersionMS, fixed.dwFileVersionLS
+    return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}"
 
 
 def _recycle(path: Path) -> bool:
@@ -448,46 +476,42 @@ def _recycle(path: Path) -> bool:
 
 
 def tidy_sibling_builds() -> list[str]:
-    """업데이트로 갈아탄 뒤 남은 예전 버전 exe 를 치운다.
+    """받은 단일 exe 의 이름을 LOCAL_NAME 으로 바꾸고 예전 버전을 치운다.
 
-    onefile 은 실행 중이던 exe 를 그 이름 그대로 덮어쓴다. 그래서
-    dccon-downloader-1.1.0-win64.exe 를 받아 쓰던 사람은 1.2.0 이 들어간
-    뒤에도 파일명이 1.1.0 으로 남는다. 이름을 지금 버전에 맞추고, 같은
-    폴더에 남은 더 낮은 버전은 휴지통으로 보낸다.
+    릴리즈에서 받은 exe 는 dccon-downloader-X.Y.Z.exe 라 처음 실행될 때
+    "디시콘 다운로더.exe" 로 이름을 바꾼다. 그 뒤 업데이트는 같은 이름을
+    그대로 덮어쓰므로 이름이 유지된다. 같은 폴더에 남은 더 낮은 버전은
+    휴지통으로 보낸다.
 
-    릴리즈 자산 이름 형식에 정확히 맞는 파일만 건드린다. 사용자가 직접
-    이름을 붙인 exe 는 형식이 달라 걸리지 않는다.
+    릴리즈 자산 이름 형식과 LOCAL_NAME 에 정확히 맞는 파일만 건드린다.
+    사용자가 직접 이름을 붙인 exe 는 걸리지 않는다.
     """
     if build_kind() != "onefile":
         return []
     exe = Path(sys.executable).resolve()
     folder = exe.parent
+    here = parse_version(__version__)
+    removed: list[str] = []
 
-    # 1) 실행 파일 이름을 지금 버전·형식에 맞춘다. 버전이 같아도 예전
-    #    이름이면 새 이름으로 옮긴다. 윈도우는 실행 중인 exe 도 이름
-    #    바꾸기는 허용한다(삭제만 막는다).
-    wanted = local_name()
-    if _named_version(exe.name) and exe.name != wanted:
-        target = folder / wanted
+    # 1) 받은 이름 그대로면 LOCAL_NAME 으로 옮긴다. 그 이름이 이미 있으면
+    #    버전 리소스를 보고 우리보다 높지 않을 때만 치우고 차지한다.
+    #    윈도우는 실행 중인 exe 도 이름 바꾸기는 허용한다(삭제만 막는다).
+    if _named_version(exe.name):
+        target = folder / LOCAL_NAME
         try:
             if target.exists():
-                # 같은 이름이 이미 있으면 그건 지금 우리와 같은 버전이다.
-                _recycle(target)
+                other = _exe_version(target)
+                if other and parse_version(other) <= here and _recycle(target):
+                    removed.append(target.name)
             if not target.exists():
                 exe.rename(target)
                 exe = target
         except OSError:
             pass  # 이름은 못 바꿔도 아래 정리는 계속한다.
 
-    # 2) 같은 폴더의 더 낮은 버전을 휴지통으로.
-    removed: list[str] = []
-    here = parse_version(__version__)
-    seen: set[Path] = set()
+    # 2) 같은 폴더의 더 낮은 버전(받은 이름 그대로인 것)을 휴지통으로.
     for pattern in _BUILD_GLOBS:
         for entry in sorted(folder.glob(pattern)):
-            if entry in seen:
-                continue
-            seen.add(entry)
             found = _named_version(entry.name)
             if not found or entry.resolve() == exe:
                 continue
