@@ -11,9 +11,15 @@
     DCCON_CONSOLE=1   콘솔 창 표시 (디버깅용)
 """
 
+import hashlib
+import json
 import os
 import re
+import sys
+import zipfile
 from pathlib import Path
+
+import PyInstaller
 
 from PyInstaller.utils.win32.versioninfo import (
     FixedFileInfo,
@@ -128,6 +134,44 @@ print(
     f"[spec] binaries {_before[0]} -> {len(a.binaries)}, "
     f"datas {_before[1]} -> {len(a.datas)}"
 )
+
+
+
+# 런타임 지문 - dccon 패키지(코드와 assets)를 뺀, exe 에 든 모든 것의 해시.
+# 코드 업데이트는 이 지문이 같은 exe 에만 올라간다 (dccon_boot.py 참고).
+# 바뀐 게 없으면 빌드할 때마다 같은 값이 나와야 한다.
+def _is_ours(name):
+    name = name.replace("\\", "/")
+    return name == "dccon" or name.startswith(("dccon.", "dccon/"))
+
+
+def _file_hash(path):
+    if not path or not os.path.isfile(path):
+        return "-"
+    if path.lower().endswith(".zip"):
+        # base_library.zip 은 빌드마다 새로 만들어져 시각이 달라진다. 내용만 본다.
+        with zipfile.ZipFile(path) as zf:
+            members = sorted(f"{i.filename}:{i.CRC:08x}" for i in zf.infolist())
+        return hashlib.sha256("\n".join(members).encode()).hexdigest()
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+_lines = [f"{sys.version}|{PyInstaller.__version__}"]
+for _group in (a.pure, a.scripts, a.binaries, a.datas):
+    for _name, _src, _kind in sorted(_group, key=lambda e: e[0]):
+        if not _is_ours(_name):
+            _lines.append(f"{_name}|{_kind}|{_file_hash(_src)}")
+_runtime_text = "\n".join(_lines)
+RUNTIME_ID = hashlib.sha256(_runtime_text.encode()).hexdigest()
+# 지문이 예상과 다르게 바뀌면 이 파일을 두 빌드 사이에 비교해 본다.
+Path(workpath, "runtime_entries.txt").write_text(_runtime_text, encoding="utf-8")
+
+_info = Path(workpath) / "build_info.json"
+_info.parent.mkdir(parents=True, exist_ok=True)
+_info.write_text(json.dumps({"version": _version_text, "runtime": RUNTIME_ID}),
+                 encoding="utf-8")
+a.datas.append(("build_info.json", str(_info), "DATA"))
+print(f"[spec] runtime {RUNTIME_ID[:12]}")
 
 pyz = PYZ(a.pure)
 

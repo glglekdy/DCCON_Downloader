@@ -2,7 +2,7 @@
 
 ## 커밋하기 전에 반드시 확인
 
-코드(`dccon/`, `run.py`, `dccon-downloader.spec`, `build.ps1`, `pyproject.toml`)를 건드렸으면
+코드(`dccon/`, `run.py`, `dccon_boot.py`, `dccon-downloader.spec`, `build.ps1`, `pyproject.toml`)를 건드렸으면
 커밋 전에 아래를 **순서대로** 통과시킨다. 하나라도 실패하면 커밋하지 않고 고친다.
 
 1. 테스트
@@ -38,6 +38,10 @@ GitHub 릴리즈를 올릴 때는 `release` 스킬(`.claude/skills/release/SKILL
 
 ## 알아둘 것
 
+- 업데이트는 가능하면 **코드 업데이트**로 간다: `dccon/` 만 담은 작은 패키지를 받아
+  `%LOCALAPPDATA%/DcconDownloader/code/` 에 두고, exe 안의 `dccon_boot.py` 가 다음 실행 때 올린다.
+  `dccon_boot.py`, `run.py` 는 exe 에만 들어가고 코드 업데이트로는 **바뀌지 않는다**. 이 둘과
+  `code/` 폴더 구조는 이미 배포된 exe 와의 약속이라 함부로 바꾸지 않는다.
 - 저장소 `glglekdy/DCCON_Downloader` 는 **공개**다. 앱의 업데이트 확인은 인증 없이
   GitHub API 를 부르므로 그대로 동작한다. 비공개로 돌리면 기존 사용자가 새 릴리즈를
   못 보고 항상 "최신 버전"이라고 하게 되니 주의.

@@ -39,7 +39,7 @@ class UpdateDialog(QDialog):
         self._task: Task | None = None
 
         kind = updater.build_kind()
-        self._asset = release.pick_asset(kind) if updater.can_self_update() else None
+        self._asset = updater.choose_asset(release, kind) if updater.can_self_update() else None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 24, 28, 24)
