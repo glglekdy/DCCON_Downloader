@@ -175,5 +175,34 @@ class BuildKindTests(unittest.TestCase):
                     self.assertEqual(updater.build_kind(), "onefile")
 
 
+class LocalNameTests(unittest.TestCase):
+    def test_versions_from_every_name_form(self):
+        self.assertEqual(updater._named_version("dccon-downloader-1.2.3.exe"), "1.2.3")
+        self.assertEqual(updater._named_version("dccon-downloader-1.1.0-win64.exe"), "1.1.0")
+        self.assertEqual(updater._named_version("디시콘 다운로더 1.2.4.exe"), "1.2.4")
+        self.assertIsNone(updater._named_version("내 디시콘.exe"))
+
+    def test_downloaded_exe_renames_itself_and_recycles_older(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            exe = folder / updater.release_name("9.0.0")
+            exe.write_bytes(b"new")
+            (folder / "디시콘 다운로더 8.0.0.exe").write_bytes(b"old")
+            (folder / "내 디시콘.exe").write_bytes(b"mine")
+            recycled = []
+
+            def fake_recycle(path):
+                recycled.append(path.name)
+                path.unlink()
+                return True
+
+            with patch.object(updater, "build_kind", return_value="onefile"),                  patch.object(updater, "__version__", "9.0.0"),                  patch.object(updater, "_recycle", fake_recycle),                  patch.object(sys, "executable", str(exe)):
+                updater.tidy_sibling_builds()
+
+            names = sorted(p.name for p in folder.iterdir())
+            self.assertEqual(names, ["내 디시콘.exe", "디시콘 다운로더 9.0.0.exe"])
+            self.assertEqual(recycled, ["디시콘 다운로더 8.0.0.exe"])
+
+
 if __name__ == "__main__":
     unittest.main()
