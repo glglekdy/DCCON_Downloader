@@ -5,9 +5,10 @@ description: 디시콘 다운로더 새 버전을 빌드·검증해서 GitHub �
 
 # 릴리즈 절차
 
-앱의 자동 업데이트(`dccon/updater.py`)는 `releases/latest` 를 보고, 자기 빌드 방식에 맞는
-자산을 **확장자로** 고른다(`.exe` = onefile, `.zip` = onedir). 아래 규칙을 어기면 이미 깔린
-앱들이 업데이트를 못 받는다.
+앱의 자동 업데이트(`dccon/updater.py`)는 `releases/latest` 를 보고 자산을 고른다.
+런타임 지문이 같으면 코드 패키지(`dccon-code-*.pyz`, 수백 KB)만 받고, 아니면 자기 빌드 방식에
+맞는 전체 자산을 **확장자로** 고른다(`.exe` = onefile, `.zip` = onedir). 아래 규칙을 어기면
+이미 깔린 앱들이 업데이트를 못 받는다.
 
 ## 0. 버전 정하기
 
@@ -43,19 +44,22 @@ git push origin main
 2번에서 만든 `dist/` 빌드를 그대로 쓴다(다시 빌드하지 않는다). `dist/release/` 에 모은다.
 
 ```bash
-uv run python - <<'EOF'
-import pathlib, shutil, zipfile
-ver = "X.Y.Z"
-out = pathlib.Path("dist/release"); shutil.rmtree(out, ignore_errors=True); out.mkdir()
-src = pathlib.Path("dist/dccon-downloader")
-with zipfile.ZipFile(out / f"dccon-downloader-{ver}.zip", "w",
-                     zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-    for p in sorted(src.rglob("*")):
-        if p.is_file():
-            zf.write(p, pathlib.Path("dccon-downloader") / p.relative_to(src))
-shutil.copy("dist/dccon-downloader.exe", out / f"dccon-downloader-{ver}.exe")
-EOF
+uv run python tools/make_release_assets.py
 ```
+
+세 개가 나온다. 셋 다 올린다.
+
+| 자산 | 받는 쪽 |
+| --- | --- |
+| `dccon-downloader-X.Y.Z.exe` | 새로 받는 사람, 지문이 다른 단일 exe 사용자 |
+| `dccon-downloader-X.Y.Z.zip` | 새로 받는 사람, 지문이 다른 폴더(onedir) 사용자 |
+| `dccon-code-X.Y.Z-<지문12>.pyz` | 지문이 같은 기존 사용자 전부 (코드 업데이트) |
+
+런타임 지문은 exe 에 든 `dccon/` 밖의 모든 것(파이썬, Qt, 라이브러리, `run.py`, `dccon_boot.py`)의
+해시다. 빌드할 때 `[spec] runtime xxxxxxxxxxxx` 로 찍히고, onedir 과 onefile 이 **같아야** 한다.
+의존성이나 `dccon_boot.py`/`run.py`/스펙을 건드리면 지문이 바뀌어 기존 사용자는 전체를 받는다
+(정상). 지문이 두 빌드 사이에 다르면 `build/dccon-downloader/runtime_entries.txt` 를 비교한다.
+코드 패키지는 확장자가 `.pyz` 라 코드 업데이트를 모르는 옛 앱(1.2.3 이하)은 무시한다.
 
 자산 이름은 `dccon-downloader-X.Y.Z.exe` / `.zip` 이다. **한글을 쓰지 말 것** -
 깃허브가 자산 이름에서 비ASCII 를 지워 `1.2.2.exe` 같은 이름이 되어 버린다.
@@ -83,7 +87,8 @@ shutil.rmtree('dist/check')"
 gh release create vX.Y.Z --repo glglekdy/DCCON_Downloader --target main \
   --title "vX.Y.Z" --notes-file <노트파일> \
   dist/release/dccon-downloader-X.Y.Z.exe \
-  dist/release/dccon-downloader-X.Y.Z.zip
+  dist/release/dccon-downloader-X.Y.Z.zip \
+  dist/release/dccon-code-X.Y.Z-*.pyz
 ```
 
 - `--draft` / `--prerelease` 를 붙이면 앱이 못 본다(`releases/latest` 에서 빠진다).
@@ -97,7 +102,7 @@ gh release view vX.Y.Z --repo glglekdy/DCCON_Downloader \
   --jq '{draft: .isDraft, pre: .isPrerelease, assets: [.assets[] | {name, size, digest}]}'
 ```
 
-`.exe` 와 `.zip` 두 자산이 있고 `digest` 가 `sha256:` 으로 채워져 있어야 한다(업데이터가 검증에 쓴다).
+`.exe`, `.zip`, `.pyz` 세 자산이 있고 `digest` 가 `sha256:` 으로 채워져 있어야 한다(업데이터가 검증에 쓴다).
 사용자에게 릴리즈 URL 을 알려준다. 저장소 공개 여부는 문서를 믿지 말고
 `gh repo view --json visibility` 로 확인한다. 비공개면 자동 업데이트가 동작하지 않는다는
 점도 함께 말한다.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -29,7 +30,19 @@ def main() -> int:
 
     window = MainWindow()
     window.show()
-    return app.exec()
+    # 코드 업데이트로 받은 코드가 창까지 띄웠으면 믿을 만하다.
+    QTimer.singleShot(1000, _confirm_code)
+    code = app.exec()
+    _confirm_code()
+    return code
+
+
+def _confirm_code() -> None:
+    try:
+        import dccon_boot
+    except ImportError:  # 테스트 등 run.py 를 거치지 않은 실행
+        return
+    dccon_boot.confirm()
 
 
 if __name__ == "__main__":

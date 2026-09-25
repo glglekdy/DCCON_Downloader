@@ -3,21 +3,28 @@
 흐름은 셋으로 나뉜다.
 
 1. `fetch_latest()`  - releases/latest 를 읽어 지금보다 새 버전인지 본다.
-2. `download()`      - 이 빌드 방식에 맞는 자산을 받아 스테이징 폴더에 풀어둔다.
+2. `download()`      - `choose_asset()` 이 고른 자산을 받아 스테이징 폴더에 풀어둔다.
 3. `launch_apply()`  - 도우미 스크립트를 띄우고 앱은 종료한다. 스크립트가
                        앱이 완전히 끝나기를 기다렸다가 파일을 덮어쓰고 다시 띄운다.
 
 실행 중인 exe 와 `_internal` 의 DLL 은 윈도우가 잠그고 있어서 앱이 스스로
 덮어쓸 수 없다. 그래서 마지막 단계만큼은 바깥 프로세스가 맡는다.
 
-릴리즈 자산 이름 규칙 (build.ps1 산출물을 그대로 올리면 된다):
-    *.exe   단일 exe 빌드용
-    *.zip   onedir 빌드용 (dccon-downloader 폴더를 통째로 압축한 것)
+코드 업데이트: 파이썬·Qt·라이브러리가 그대로면 `dccon` 패키지만 담은
+작은 자산(수백 KB)을 받아 DATA_DIR/code 에 풀고 다시 띄운다. exe 는 그대로
+두고 dccon_boot 가 다음 실행 때 새 코드를 올린다. 런타임 지문이 다르거나
+그 버전이 시작하다 죽었던 적이 있으면 전체 자산으로 간다.
+
+릴리즈 자산 이름 규칙 (tools/make_release_assets.py 가 만든다):
+    *.exe                              단일 exe 빌드용
+    *.zip                              onedir 빌드용 (dccon-downloader 폴더를 통째로 압축한 것)
+    dccon-code-X.Y.Z-<지문 12자>.pyz   코드 업데이트용 (zip). 옛 앱이 .zip 으로 착각하지 않게
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -30,6 +37,8 @@ from pathlib import Path
 from typing import Callable
 
 import httpx
+
+import dccon_boot
 
 from . import __version__
 from .config import DATA_DIR
@@ -127,6 +136,15 @@ class Release:
             ],
         )
 
+    def code_asset(self, runtime: str) -> Asset | None:
+        """이 런타임 지문에 맞는 코드 업데이트 자산."""
+        for asset in self.assets:
+            found = _CODE_NAME.match(asset.name)
+            if (found and asset.url and found.group(1) == self.version
+                    and runtime.startswith(found.group(2))):
+                return asset
+        return None
+
     def pick_asset(self, kind: str | None) -> Asset | None:
         suffix = {"onefile": ".exe", "onedir": ".zip"}.get(kind or "")
         if not suffix:
@@ -135,6 +153,26 @@ class Release:
         # 여러 개면 이름에 win 이 들어간 쪽을 먼저 본다.
         matches.sort(key=lambda a: "win" not in a.name.lower())
         return matches[0] if matches else None
+
+
+_CODE_NAME = re.compile(r"^dccon-code-(\d+\.\d+\.\d+)-([0-9a-f]{12})\.pyz$")
+
+
+def code_asset_name(version: str, runtime: str) -> str:
+    return f"dccon-code-{version}-{runtime[:12]}.pyz"
+
+
+def choose_asset(release: Release, kind: str | None) -> Asset | None:
+    """받을 자산. 코드 업데이트가 되면 그쪽, 아니면 빌드 방식에 맞는 전체 자산."""
+    if kind is None:
+        return None
+    runtime = dccon_boot.build_info().get("runtime")
+    rejected = dccon_boot._read(dccon_boot.REJECTED)
+    if runtime and rejected != release.version:
+        asset = release.code_asset(runtime)
+        if asset is not None:
+            return asset
+    return release.pick_asset(kind)
 
 
 def _http(timeout: float = 20.0) -> httpx.Client:
@@ -172,8 +210,8 @@ def fetch_latest(client: httpx.Client | None = None) -> Release | None:
 @dataclass
 class StagedUpdate:
     release: Release
-    kind: str
-    source: Path   # 설치 폴더에 그대로 덮어쓸 내용이 들어있는 폴더
+    kind: str      # "onefile", "onedir", 또는 코드 업데이트면 "code"
+    source: Path   # 설치 폴더에 덮어쓸 내용이 든 폴더 (code 면 받은 코드 폴더)
 
 
 def download(
@@ -185,9 +223,11 @@ def download(
     client: httpx.Client | None = None,
     staging_root: Path = UPDATE_DIR,
 ) -> StagedUpdate:
-    asset = release.pick_asset(kind)
+    asset = choose_asset(release, kind)
     if asset is None:
         raise UpdateError("이 릴리즈에는 이 빌드에 맞는 파일이 없습니다.")
+    if _CODE_NAME.match(asset.name):
+        kind = "code"
 
     work = staging_root / release.tag
     shutil.rmtree(work, ignore_errors=True)
@@ -220,7 +260,9 @@ def download(
     part.replace(target)
 
     source = work / "app"
-    if kind == "onefile":
+    if kind == "code":
+        source = _extract_code(target, source, release.version)
+    elif kind == "onefile":
         # 사용자가 exe 이름을 바꿔 썼을 수도 있으니 지금 이름에 맞춘다.
         source.mkdir()
         shutil.move(str(target), source / Path(sys.executable).name)
@@ -265,6 +307,62 @@ def _extract_onedir(archive: Path, dest: Path) -> Path:
     return root
 
 
+def _extract_code(archive: Path, dest: Path, version: str) -> Path:
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            zf.extractall(dest)
+    except zipfile.BadZipFile as exc:
+        raise UpdateError("받은 코드 파일이 올바르지 않습니다.") from exc
+    archive.unlink(missing_ok=True)
+    try:
+        manifest = json.loads((dest / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise UpdateError("받은 코드에 manifest.json 이 없습니다.") from exc
+    runtime = dccon_boot.build_info().get("runtime")
+    if manifest.get("version") != version or manifest.get("runtime") != runtime:
+        raise UpdateError("받은 코드가 이 버전의 앱과 맞지 않습니다.")
+    if not (dest / "dccon" / "__init__.py").is_file():
+        raise UpdateError("받은 코드에 dccon 패키지가 없습니다.")
+    return dest
+
+
+def install_code(staged: StagedUpdate) -> Path:
+    """받은 코드를 CODE_DIR/<버전> 으로 옮기고 current.txt 가 가리키게 한다.
+
+    지금 돌고 있는 코드 폴더는 건드리지 않는다. 다음 실행 때 dccon_boot 가
+    새 폴더를 올리고, 옛 폴더는 cleanup_code() 가 치운다.
+    """
+    version = staged.release.version
+    code_dir = dccon_boot.CODE_DIR
+    folder = code_dir / version
+    code_dir.mkdir(parents=True, exist_ok=True)
+    if folder.exists() and dccon_boot.active != version:
+        shutil.rmtree(folder)
+    if not folder.exists():
+        shutil.move(str(staged.source), str(folder))
+    (folder / dccon_boot.UNCONFIRMED).touch()
+    (folder / dccon_boot.TRIED).unlink(missing_ok=True)
+    part = code_dir / "current.txt.part"
+    part.write_text(version, encoding="utf-8")
+    part.replace(dccon_boot.CURRENT)
+    return folder
+
+
+def cleanup_code() -> None:
+    """쓰지 않는 코드 폴더를 치운다. exe 가 따라잡았으면 current.txt 도."""
+    code_dir = dccon_boot.CODE_DIR
+    if not code_dir.is_dir():
+        return
+    current = dccon_boot._read(dccon_boot.CURRENT)
+    base = dccon_boot.build_info().get("version", "")
+    if current and parse_version(current) <= parse_version(base):
+        dccon_boot.CURRENT.unlink(missing_ok=True)
+        current = ""
+    for entry in code_dir.iterdir():
+        if entry.is_dir() and entry.name not in (current, dccon_boot.active):
+            shutil.rmtree(entry, ignore_errors=True)
+
+
 # ------------------------------------------------------------- 적용
 # 앱이 끝나기를 기다렸다가 덮어쓰고 다시 띄운다. 실패하면 되돌리고
 # 로그를 남긴 뒤 옛 버전을 띄운다 - 다음 실행 때 앱이 로그를 보여준다.
@@ -296,6 +394,12 @@ function Retry([scriptblock]$Action) {
             Start-Sleep -Milliseconds 500
         }
     }
+}
+
+# 코드 업데이트는 옮길 파일이 없다. 끝나기를 기다렸다가 다시 띄우기만 한다.
+if (-not $Source) {
+    Start-Process -FilePath $Exe -WorkingDirectory $Target
+    exit 0
 }
 
 $internal = Join-Path $Target '_internal'
@@ -335,6 +439,14 @@ def launch_apply(staged: StagedUpdate) -> None:
     if not can_self_update():
         raise UpdateError("설치된 exe 에서만 자동 업데이트할 수 있습니다.")
     exe = Path(sys.executable).resolve()
+    source = ""
+    if staged.kind == "code":
+        try:
+            install_code(staged)
+        except OSError as exc:
+            raise UpdateError(f"받은 코드를 설치하지 못했습니다. ({exc})") from exc
+    else:
+        source = str(staged.source)
     UPDATE_DIR.mkdir(parents=True, exist_ok=True)
     script = UPDATE_DIR / "apply_update.ps1"
     # PowerShell 5.1 은 BOM 이 없으면 ANSI 로 읽어 한글이 깨진다.
@@ -342,22 +454,26 @@ def launch_apply(staged: StagedUpdate) -> None:
     ERROR_LOG.unlink(missing_ok=True)
 
     pids = [os.getpid()]
-    if staged.kind == "onefile":
+    if build_kind() == "onefile":
         # onefile 은 부트로더 부모 프로세스가 exe 를 잡고 있다.
         pids.append(os.getppid())
 
+    args = [
+        "powershell.exe", "-NoProfile", "-NonInteractive",
+        "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+        "-File", str(script),
+        "-WaitPids", ",".join(str(p) for p in pids),
+        "-Target", str(exe.parent),
+        "-Exe", str(exe),
+        "-Log", str(ERROR_LOG),
+    ]
+    # 빈 문자열 인자는 PowerShell 5.1 -File 이 떨어뜨리기도 해서 아예 뺀다.
+    if source:
+        args += ["-Source", source]
+
     flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
     subprocess.Popen(
-        [
-            "powershell.exe", "-NoProfile", "-NonInteractive",
-            "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
-            "-File", str(script),
-            "-WaitPids", ",".join(str(p) for p in pids),
-            "-Source", str(staged.source),
-            "-Target", str(exe.parent),
-            "-Exe", str(exe),
-            "-Log", str(ERROR_LOG),
-        ],
+        args,
         creationflags=flags,
         close_fds=True,
         stdin=subprocess.DEVNULL,

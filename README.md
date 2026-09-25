@@ -152,9 +152,26 @@ Windows 11 / Python 3.13 / PyInstaller 6.22 에서 실측한 값:
 | --- | --- |
 | `*.exe` (`./build.ps1 -OneFile` 결과) | 단일 exe로 쓰는 사람 |
 | `*.zip` (`dist/dccon-downloader/` 폴더째 압축) | onedir 폴더로 쓰는 사람 |
+| `dccon-code-X.Y.Z-<지문>.pyz` (`dccon/` 코드만) | 파이썬·Qt·라이브러리가 그대로인 기존 사용자 |
 
-zip 안에는 exe와 `_internal/`이 있어야 한다(한 겹 폴더로 감싸져 있어도 된다). 둘 중 하나만
-올리면 다른 방식 사용자는 '릴리즈 페이지 열기'로 안내된다.
+세 개 다 `uv run python tools/make_release_assets.py` 가 `dist/release/` 에 만든다.
+zip 안에는 exe와 `_internal/`이 있어야 한다(한 겹 폴더로 감싸져 있어도 된다).
+
+### 코드 업데이트
+
+앱 코드만 바뀐 릴리즈는 30MB 전체 대신 수백 KB짜리 코드 패키지만 받는다.
+
+```
+빌드   → dccon/ 밖의 모든 것(파이썬, Qt, 라이브러리)의 해시 = 런타임 지문을 exe 에 넣음
+받기   → 지문이 같은 .pyz 가 있으면 그것만 받아 %LOCALAPPDATA%/DcconDownloader/code/<버전>/ 에 풂
+재시작 → exe 안의 dccon_boot.py 가 그 폴더를 sys.path 맨 앞에 올림
+```
+
+받은 코드가 import 부터 실패하거나, 처음 띄웠을 때 창이 뜨기 전에 죽으면 그 버전은 버리고
+exe에 든 코드로 뜬다. 그 버전은 다음부터 전체 자산으로 받는다. 지문이 다르면(의존성을 올렸거나
+`run.py`·`dccon_boot.py`를 바꿨으면) 처음부터 전체 자산을 받는다.
+
+### 전체 교체
 
 적용은 이렇게 된다. 실행 중인 exe와 DLL은 윈도우가 잠그고 있어서 앱이 스스로 덮어쓸 수 없다.
 

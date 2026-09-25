@@ -919,6 +919,7 @@ class MainWindow(QMainWindow):
 
         def work():
             updater.cleanup_staging()
+            updater.cleanup_code()
             return updater.fetch_latest()
 
         task = Task(work, parent=self)
