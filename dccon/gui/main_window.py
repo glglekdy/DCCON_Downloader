@@ -14,7 +14,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     Qt, QThreadPool, QTimer, Signal, QPropertyAnimation, QSignalBlocker,
-    QEvent,
+    QEvent, QEasingCurve, QVariantAnimation,
 )
 from PySide6.QtGui import QAction, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
@@ -47,7 +47,7 @@ from .queuebar import QueueBar
 from .settings_dialog import SettingsDialog
 from .update_dialog import UpdateDialog
 from .workers import DownloadSignals, Task, ThumbSignals, ThumbTask
-from .motion import SmoothScrollArea, animate
+from .motion import SmoothScrollArea, animate, motion_duration
 from .glow import DockShade, DownloadGlow
 
 HOME_TABS = [("day", "일간 인기"), ("week", "주간 인기"),
@@ -147,22 +147,6 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
 
         root.addWidget(self._build_topbar())
-        heading = QFrame()
-        heading.setObjectName("viewHeader")
-        heading_row = QVBoxLayout(heading)
-        heading_row.setContentsMargins(28, 22, 28, 14)
-        heading_row.setSpacing(6)
-        self.crumb = QLabel()
-        self.crumb.setObjectName("crumb")
-        self.crumb.setWordWrap(True)
-        self.crumb.setTextFormat(Qt.TextFormat.PlainText)
-        heading_row.addWidget(self.crumb)
-        self.view_hint = QLabel("마음에 드는 패키지를 선택하세요. 더블클릭하면 안의 디시콘을 볼 수 있어요.")
-        self.view_hint.setObjectName("viewHint")
-        self.view_hint.setWordWrap(True)
-        heading_row.addWidget(self.view_hint)
-        root.addWidget(heading)
-        root.addWidget(self._build_tabs())
 
         self.loading = QProgressBar()
         self.loading.setObjectName("loadingLine")
@@ -177,7 +161,36 @@ class MainWindow(QMainWindow):
         holder.setObjectName("gridHolder")
         # 스타일시트만으로는 스크롤 영역 안쪽 위젯이 칠해지지 않아 까맣게 뜬다.
         holder.setAutoFillBackground(True)
-        self.grid = FlowLayout(holder, margin=28, spacing=16)
+        # 제목과 탭도 스크롤 안에 둔다. 내리면 같이 올라가 카드 자리가 넓어진다.
+        content = QVBoxLayout(holder)
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(0)
+
+        heading = QFrame()
+        heading.setObjectName("viewHeader")
+        heading_row = QVBoxLayout(heading)
+        heading_row.setContentsMargins(28, 22, 28, 14)
+        heading_row.setSpacing(6)
+        self.crumb = QLabel()
+        self.crumb.setObjectName("crumb")
+        self.crumb.setWordWrap(True)
+        self.crumb.setTextFormat(Qt.TextFormat.PlainText)
+        heading_row.addWidget(self.crumb)
+        self.view_hint = QLabel("마음에 드는 패키지를 선택하세요. 더블클릭하면 안의 디시콘을 볼 수 있어요.")
+        self.view_hint.setObjectName("viewHint")
+        self.view_hint.setWordWrap(True)
+        heading_row.addWidget(self.view_hint)
+        content.addWidget(heading)
+        content.addWidget(self._build_tabs())
+
+        cards = QWidget()
+        self.grid = FlowLayout(cards, margin=28, spacing=16)
+        self.grid.setContentsMargins(28, 14, 28, 28)
+        content.addWidget(cards)
+        # 떠 있는 다운로드 독에 마지막 줄이 가리지 않도록 그만큼 비워둔다.
+        self._dock_pad = QWidget()
+        content.addWidget(self._dock_pad)
+        content.addStretch(1)
         self.scroll.setWidget(holder)
         # Never composite the entire scrolling holder: it includes offscreen cards.
         self._title_effect = QGraphicsOpacityEffect(self.crumb)
@@ -188,7 +201,8 @@ class MainWindow(QMainWindow):
         self._title_motion.finished.connect(lambda: self._title_effect.setEnabled(False))
         root.addWidget(self.scroll, 1)
 
-        dock_space = DockShade()
+        # 독은 레이아웃에 넣지 않고 그리드 위에 띄운다. 자리는 _place_dock 이 잡는다.
+        dock_space = DockShade(central)
         dock_space.setObjectName("dockSpace")
         dock_margin = QVBoxLayout(dock_space)
         dock_margin.setContentsMargins(28, 14, 28, 20)
@@ -208,8 +222,6 @@ class MainWindow(QMainWindow):
         # 독 위에 붙는 손잡이. 눌러서 다운로드 바를 아래로 숨긴다.
         handle_row = QHBoxLayout()
         handle_row.setContentsMargins(0, 0, 0, 6)
-        self._handle_row = handle_row
-        self._dock_margin = dock_margin
         handle_row.addStretch(1)
         self.dock_toggle = QPushButton("▼")
         self.dock_toggle.setObjectName("dockToggle")
@@ -226,10 +238,17 @@ class MainWindow(QMainWindow):
         dock_margin.addWidget(dock)
 
         self.dock = dock
+        self.dock_space = dock_space
         dock_space.follow(dock)
-        self._dock_motion = QPropertyAnimation(dock, b"maximumHeight", self)
-        self._dock_motion.finished.connect(self._finish_dock_motion)
-        root.addWidget(dock_space)
+        # 독 높이가 바뀌면(큐 내역 펼치기 등) 레이아웃 요청이 여기로 올라온다.
+        dock_space.installEventFilter(self)
+        # 숨기기는 독을 접지 않고 통째로 창 아래로 미끄러뜨린다.
+        # 0 이면 다 보이고 1 이면 손잡이만 남는다.
+        self._dock_hidden = 0.0
+        self._dock_motion = QVariantAnimation(self)
+        self._dock_motion.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._dock_motion.valueChanged.connect(self._set_dock_hidden)
+        dock_space.raise_()
 
         # 그리드 위로는 번지고 독 아래로는 깔리도록 사이에 끼운다.
         self.glow = DownloadGlow(central)
@@ -245,7 +264,20 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
+        self._place_dock()
         self._place_glow()
+
+    def _place_dock(self) -> None:
+        central = self.centralWidget()
+        if central is None or not hasattr(self, "dock_space"):
+            return
+        height = self.dock_space.sizeHint().height()
+        # 다 숨겨도 손잡이(위 여백 + 버튼)와 그 아래 12px 는 남긴다.
+        handle = self.dock_toggle.geometry().bottom() + 1 + 12
+        shift = round(max(0, height - handle) * self._dock_hidden)
+        self.dock_space.setGeometry(0, central.height() - height + shift,
+                                    central.width(), height)
+        self._dock_pad.setFixedHeight(height - shift)
 
     def _place_glow(self) -> None:
         central = self.centralWidget()
@@ -257,23 +289,20 @@ class MainWindow(QMainWindow):
 
     def _toggle_dock(self, hidden: bool) -> None:
         self._dock_motion.stop()
-        # sizeHint 는 접힌 뒤에도 원래 높이를 알려준다.
-        full = self.dock.sizeHint().height()
-        if hidden:
-            self.dock.setMaximumHeight(full)
-            animate(self._dock_motion, 0, 220)
-        else:
-            animate(self._dock_motion, full, 220)
         self.dock_toggle.setText("▲" if hidden else "▼")
-        # 접으면 손잡이만 남기고 아래 여백을 완전히 없앤다.
-        self._dock_margin.setContentsMargins(
-            28, 6 if hidden else 14, 28, 0 if hidden else 20)
-        self._handle_row.setContentsMargins(0, 0, 0, 0 if hidden else 6)
+        target = 1.0 if hidden else 0.0
+        duration = motion_duration(260)
+        if not duration:
+            self._set_dock_hidden(target)
+            return
+        self._dock_motion.setDuration(duration)
+        self._dock_motion.setStartValue(self._dock_hidden)
+        self._dock_motion.setEndValue(target)
+        self._dock_motion.start()
 
-    def _finish_dock_motion(self) -> None:
-        # 펼친 뒤에는 상한을 풀어야 큐 내역이 펼쳐질 때 눌리지 않는다.
-        if not self.dock_toggle.isChecked():
-            self.dock.setMaximumHeight(16777215)
+    def _set_dock_hidden(self, value: float) -> None:
+        self._dock_hidden = float(value)
+        self._place_dock()
 
     def _build_topbar(self) -> QWidget:
         bar = QFrame()
@@ -284,7 +313,14 @@ class MainWindow(QMainWindow):
 
         brand = ClickableLabel("dccon")
         mark = ClickableLabel()
-        mark.setPixmap(QPixmap(str(Path(__file__).parent / "assets" / "brand.svg")))
+        # 앱 아이콘과 같은 로고. 고해상도 화면에서도 선명하도록 배율만큼 크게 줄인다.
+        ratio = self.devicePixelRatioF()
+        logo = QPixmap(str(Path(__file__).parent / "assets" / "icon.png")).scaled(
+            round(34 * ratio), round(34 * ratio),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation)
+        logo.setDevicePixelRatio(ratio)
+        mark.setPixmap(logo)
         mark.setFixedSize(34, 34)
         row.addWidget(mark)
         brand.setObjectName("brand")
@@ -552,6 +588,13 @@ class MainWindow(QMainWindow):
         self._restore(self._forward.pop())
 
     def eventFilter(self, obj, event):  # noqa: N802
+        if obj is getattr(self, "dock_space", None):
+            if event.type() == QEvent.Type.LayoutRequest:
+                self._place_dock()
+            elif event.type() == QEvent.Type.Wheel:
+                # 독 옆 빈자리에서 굴려도 그리드가 스크롤되게 넘겨준다.
+                self.scroll.wheelEvent(event)
+                return True
         # 마우스 4번(뒤로) · 5번(앞으로). 브라우저와 같은 동작.
         if event.type() == QEvent.Type.MouseButtonPress:
             if event.button() == Qt.MouseButton.BackButton:
