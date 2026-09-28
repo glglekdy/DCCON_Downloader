@@ -236,5 +236,16 @@ class LocalNameTests(unittest.TestCase):
             self.assertEqual(recycled, [])
 
 
+class RelaunchEnvTests(unittest.TestCase):
+    def test_onefile_markers_are_dropped(self):
+        fake = {"PATH": "C:\\bin", "_PYI_APPLICATION_HOME_DIR": "C:\\Temp\\_MEI1",
+                "_PYI_PARENT_PROCESS_LEVEL": "1", "_MEIPASS2": "C:\\Temp\\_MEI1"}
+        with patch.dict(updater.os.environ, fake, clear=True):
+            env = updater.relaunch_env()
+        self.assertEqual(env["PATH"], "C:\\bin")
+        self.assertEqual(env["PYINSTALLER_RESET_ENVIRONMENT"], "1")
+        self.assertFalse([k for k in env if k.startswith(("_PYI_", "_MEIPASS"))])
+
+
 if __name__ == "__main__":
     unittest.main()

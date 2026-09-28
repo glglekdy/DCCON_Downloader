@@ -434,6 +434,19 @@ Start-Process -FilePath $Exe -WorkingDirectory $Target
 """
 
 
+def relaunch_env() -> dict[str, str]:
+    """다시 띄울 exe 에 물려줄 환경.
+
+    onefile 부트로더는 `_PYI_*` 변수로 자기 자식을 알아본다. 그대로 물려주면
+    새 exe 가 압축을 풀지 않고 옛 프로세스의 `_MEI...` 폴더를 쓰려 하는데,
+    그 폴더는 옛 앱이 끝나며 지워져 "Failed to load Python DLL" 이 뜬다.
+    """
+    env = {k: v for k, v in os.environ.items()
+           if not k.upper().startswith(("_PYI_", "_MEIPASS"))}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
+
+
 def launch_apply(staged: StagedUpdate) -> None:
     """도우미를 띄운다. 호출한 쪽은 곧바로 앱을 종료해야 한다."""
     if not can_self_update():
@@ -474,6 +487,7 @@ def launch_apply(staged: StagedUpdate) -> None:
     flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
     subprocess.Popen(
         args,
+        env=relaunch_env(),
         creationflags=flags,
         close_fds=True,
         stdin=subprocess.DEVNULL,
