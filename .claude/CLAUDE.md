@@ -2,7 +2,7 @@
 
 ## 커밋하기 전에 반드시 확인
 
-코드(`dccon/`, `run.py`, `dccon_boot.py`, `dccon-downloader.spec`, `build.ps1`, `pyproject.toml`)를 건드렸으면
+코드(`dccon/`, `run.py`, `dccon_boot.py`, `dccon-downloader.spec`, `build.ps1`, `build.sh`, `pyproject.toml`)를 건드렸으면
 커밋 전에 아래를 **순서대로** 통과시킨다. 하나라도 실패하면 커밋하지 않고 고친다.
 
 1. 테스트
@@ -28,6 +28,19 @@
    ```
    둘 다 `alive=True window=디시콘 다운로더` 여야 한다. 창이 안 뜨면 `./build.ps1 -Console` 로
    다시 빌드해서 콘솔에 찍히는 오류를 본다.
+
+### macOS 에서 작업할 때
+
+PowerShell 빌드는 윈도우에서만 된다. 맥에서는 2~3 대신 아래를 한다.
+
+```bash
+./build.sh --clean
+open "dist/디시콘 다운로더.app"   # 몇 초 뒤 창이 떠야 한다
+```
+끝에 `[spec] binaries ...` 와 `완료: ...` 줄이 나와야 성공이다. 창이 안 뜨면
+`dist/dccon-downloader/dccon-downloader` 를 터미널에서 직접 실행해 오류를 본다.
+spec 이나 `build.ps1` 을 바꿨다면 윈도우 빌드는 확인하지 못한 상태라는 걸 커밋 메시지나
+사용자에게 알린다.
 
 문서(README 등)만 바꾼 커밋은 1~3을 건너뛰어도 된다.
 
