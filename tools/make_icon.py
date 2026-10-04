@@ -1,7 +1,9 @@
 """앱 아이콘 빌더.
 
 `dccon/gui/assets/icon.png` 한 장을 받아 윈도우가 쓰는 크기별로 줄인 뒤
-ICO 컨테이너로 싼다. macOS 용 ICNS 도 같은 방식으로 PNG 를 그대로 담아 만든다. 아이콘 원본은 그 PNG 하나뿐이고, 앱이 실행 중에
+ICO 컨테이너로 싼다. macOS 용 ICNS 도 같은 방식으로 PNG 를 그대로 담아 만든다.
+맥은 아이콘을 둥글게 깎아 주지 않으므로 ICNS 에는 dccon.gui.appicon 으로
+여백과 둥근 모서리를 입힌 그림을 담는다. 아이콘 원본은 그 PNG 하나뿐이고, 앱이 실행 중에
 창 아이콘으로 쓰는 것도 같은 파일이다.
 
 Qt의 ICO 플러그인은 읽기 전용이라 컨테이너를 직접 만든다.
@@ -20,6 +22,9 @@ from PySide6.QtCore import QBuffer, QByteArray, Qt
 from PySide6.QtGui import QGuiApplication, QImage
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from dccon.gui.appicon import macos_icon  # noqa: E402
 SOURCE = ROOT / "dccon" / "gui" / "assets" / "icon.png"
 OUT = ROOT / "assets" / "icon.ico"
 OUT_ICNS = OUT.with_suffix(".icns")
@@ -36,11 +41,14 @@ ICNS_TYPES = {
 
 def render(source: QImage, size: int) -> bytes:
     """원본을 한 변이 size인 PNG 바이트로 줄인다."""
-    frame = source.scaled(
+    return png_bytes(source.scaled(
         size, size,
         Qt.AspectRatioMode.IgnoreAspectRatio,
         Qt.TransformationMode.SmoothTransformation,
-    )
+    ))
+
+
+def png_bytes(frame: QImage) -> bytes:
 
     # QBuffer는 넘겨받은 QByteArray를 포인터로 들고 있다. 임시 객체를 주면
     # 곧바로 소멸해서 세그폴트가 난다. 반드시 참조를 잡아둘 것.
@@ -108,7 +116,8 @@ def main() -> int:
     print(f"{OUT}  ({OUT.stat().st_size:,} bytes, "
           f"{len(frames)} sizes: {', '.join(map(str, SIZES))})")
 
-    icns_frames = {size: render(source, size) for size in sorted(set(ICNS_TYPES.values()))}
+    icns_frames = {size: png_bytes(macos_icon(source, size))
+                   for size in sorted(set(ICNS_TYPES.values()))}
     OUT_ICNS.write_bytes(build_icns(icns_frames))
     print(f"{OUT_ICNS}  ({OUT_ICNS.stat().st_size:,} bytes)")
     return 0
