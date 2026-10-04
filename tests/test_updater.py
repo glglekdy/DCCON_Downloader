@@ -66,6 +66,16 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(release.pick_asset("onedir").name, "dccon-downloader-0.2.0-win64.zip")
         self.assertIsNone(release.pick_asset(None))
 
+    def test_pick_asset_skips_macos_zip(self):
+        for mac_name in ("dccon-downloader-0.2.0-macos.zip", "dccon-downloader-0.2.0-darwin.zip"):
+            release = updater.Release.from_api(release_json(assets=[
+                asset_json(mac_name),
+                asset_json("dccon-downloader-0.2.0-win64.zip"),
+            ]))
+            self.assertEqual(release.pick_asset("onedir").name, "dccon-downloader-0.2.0-win64.zip")
+            only_mac = updater.Release.from_api(release_json(assets=[asset_json(mac_name)]))
+            self.assertIsNone(only_mac.pick_asset("onedir"))
+
     def test_fetch_latest(self):
         def handler(request):
             self.assertEqual(str(request.url), updater.LATEST_URL)

@@ -153,7 +153,7 @@ DARK = {
 
 _TEMPLATE = """
 QWidget {
-    font-family: "Malgun Gothic", "Segoe UI", sans-serif;
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
     font-size: 13px; color: $text;
 }
 QMainWindow, QDialog { background: $bg; }

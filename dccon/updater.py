@@ -149,7 +149,13 @@ class Release:
         suffix = {"onefile": ".exe", "onedir": ".zip"}.get(kind or "")
         if not suffix:
             return None
-        matches = [a for a in self.assets if a.name.lower().endswith(suffix) and a.url]
+        # macOS 용 .app zip 도 같은 릴리즈에 올라가므로 후보에서 뺀다.
+        # ("darwin" 에도 win 이 들어 있어서 아래 정렬만으로는 못 막는다.)
+        matches = [
+            a for a in self.assets
+            if a.name.lower().endswith(suffix) and a.url
+            and not any(t in a.name.lower() for t in ("macos", "darwin", "mac-", "-mac."))
+        ]
         # 여러 개면 이름에 win 이 들어간 쪽을 먼저 본다.
         matches.sort(key=lambda a: "win" not in a.name.lower())
         return matches[0] if matches else None

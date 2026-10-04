@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
@@ -11,6 +12,8 @@ APP_NAME = "DcconDownloader"
 
 
 def _data_dir() -> Path:
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / APP_NAME
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_DATA_HOME")
     if base:
         return Path(base) / APP_NAME
