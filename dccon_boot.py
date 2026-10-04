@@ -29,8 +29,11 @@ import sys
 from pathlib import Path
 
 # dccon.config.DATA_DIR 과 같아야 한다 (dccon 을 import 하기 전이라 따로 계산).
-_base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_DATA_HOME")
-DATA_DIR = Path(_base) / "DcconDownloader" if _base else Path.home() / ".dccondownloader"
+if sys.platform == "darwin":
+    DATA_DIR = Path.home() / "Library" / "Application Support" / "DcconDownloader"
+else:
+    _base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_DATA_HOME")
+    DATA_DIR = Path(_base) / "DcconDownloader" if _base else Path.home() / ".dccondownloader"
 CODE_DIR = DATA_DIR / "code"
 CURRENT = CODE_DIR / "current.txt"
 REJECTED = CODE_DIR / "rejected.txt"
