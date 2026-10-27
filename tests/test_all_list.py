@@ -99,7 +99,7 @@ class AllTabTests(unittest.TestCase):
         self.assertEqual(len(self.window._cards), 15)
         self.assertEqual(self.window.page_label.text(), "1 / 6142")
         self.assertFalse(self.window.prev_btn.isHidden())
-        self.assertIn("92,133", self.window.view_hint.text())
+        self.assertIn("92,133", self.window.result_label.text())
 
     def test_next_prev_and_jump(self):
         self.window.show_home("all")
