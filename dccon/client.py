@@ -49,7 +49,8 @@ class Throttle:
 
 
 class DcconClient:
-    def __init__(self, throttle: Throttle | None = None, timeout: float = 20.0) -> None:
+    def __init__(self, throttle: Throttle | None = None, timeout: float = 20.0,
+                 headers: dict | None = None) -> None:
         self._throttle = throttle or Throttle()
         self._client = httpx.Client(
             timeout=timeout,
@@ -58,6 +59,7 @@ class DcconClient:
                 "User-Agent": USER_AGENT,
                 "Referer": REFERER,
                 "Accept-Language": "ko-KR,ko;q=0.9",
+                **(headers or {}),
             },
             limits=httpx.Limits(max_connections=16, max_keepalive_connections=8),
         )
@@ -65,6 +67,12 @@ class DcconClient:
         self._resume = threading.Event()
         self._resume.set()
         self._pause_lock = threading.Lock()
+
+    def set_session(self, user_agent: str, cookies: httpx.Cookies) -> None:
+        """로그인 쿠키를 갈아 끼운다. 쿠키가 UA 에 묶여 있어 UA 도 같이 바꾼다."""
+        if user_agent:
+            self._client.headers["User-Agent"] = user_agent
+        self._client.cookies = cookies
 
     # ---- 일시정지 제어 -------------------------------------------------
     @property

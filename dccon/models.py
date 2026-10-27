@@ -8,6 +8,9 @@ IMAGE_BASE = "https://dcimg5.dcinside.com/dccon.php?no="
 
 
 def image_url(path: str) -> str:
+    # 아카콘은 path 자리에 전체 주소가 들어온다.
+    if path.startswith(("http://", "https://")):
+        return path
     return IMAGE_BASE + path
 
 
@@ -20,6 +23,8 @@ class DcconItem:
     sort: int
     ext: str
     path: str
+    # 미리보기를 따로 받아야 할 때(아카콘 mp4 의 poster). 비면 url 을 쓴다.
+    thumb: str = ""
 
     @property
     def url(self) -> str:

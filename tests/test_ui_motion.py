@@ -12,6 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from dccon.config import Settings
+from dccon.gui.cards import THUMB
 from dccon.gui.main_window import MainWindow
 from dccon.gui.theme import STYLE
 from dccon.models import PackageBrief
@@ -141,7 +142,7 @@ class MotionTests(unittest.TestCase):
         source = QPixmap(1200, 800)
         source.fill(Qt.GlobalColor.blue)
         preview.set_source(source)
-        self.assertLessEqual(preview.source.deviceIndependentSize().width(), 137)
+        self.assertLessEqual(preview.source.deviceIndependentSize().width(), THUMB + 1)
         self.assertAlmostEqual(preview.source.width() / preview.source.height(), 1.5, delta=.02)
         key = preview.source.cacheKey()
         preview.grab()
