@@ -155,8 +155,8 @@ DARK = {
 
 _TEMPLATE = """
 QWidget {
-    font-family: "Pretendard Variable", "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
-    font-size: 13px; color: $text;
+    font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    font-size: 13px; font-weight: 400; color: $text;
 }
 QMainWindow, QDialog { background: $bg; }
 QLabel { background: transparent; }

@@ -492,7 +492,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.next_btn)
         col.addLayout(row)
 
-        self.view_hint = QLabel("마음에 드는 패키지를 선택하세요. 더블클릭하면 안의 디시콘을 볼 수 있어요.")
+        self.view_hint = QLabel()
         self.view_hint.setObjectName("viewHint")
         self.view_hint.setWordWrap(True)
         col.addWidget(self.view_hint)
@@ -556,11 +556,9 @@ class MainWindow(QMainWindow):
                 widget.deleteLater()
         self.crumb.setText(crumb)
         self.result_label.clear()
-        self.view_hint.setText(
-            "저장할 디시콘을 선택한 뒤 다운로드하세요."
-            if self._view == "package" else
-            "마음에 드는 패키지를 선택하세요. 더블클릭하면 안의 디시콘을 볼 수 있어요."
-        )
+        # 안내 문구는 패키지 안에서만 보인다(작가·개수 표시).
+        self.view_hint.setText("저장할 디시콘을 선택한 뒤 다운로드하세요.")
+        self.view_hint.setVisible(self._view == "package")
         self.scroll.verticalScrollBar().setValue(0)
         self._update_selection()
         return self._generation
@@ -609,15 +607,12 @@ class MainWindow(QMainWindow):
             rows, pages, total = payload
             self._all = (page, pages)
             self._set_page_label(page, pages)
-            if total:
-                self.view_hint.setText(
-                    f"사이트에 올라온 디시콘 {total:,}개를 최신순으로 보여줘요. "
-                    "더블클릭하면 안의 디시콘을 볼 수 있어요."
-                )
             if not rows:
                 self._show_empty("이 페이지에는 디시콘이 없습니다.")
                 return
             self._fill_packages(gen, rows)
+            if total:
+                self.result_label.setText(f"전체 {total:,}개 패키지")
 
         self._run(lambda: api.fetch_all(self.client, page), done)
 
@@ -1157,7 +1152,7 @@ class MainWindow(QMainWindow):
             self, "아카콘 로그인",
             "아카콘을 보려면 아카라이브 로그인이 필요합니다.\n\n"
             "확인을 누르면 로그인 창(Chrome 또는 Edge)이 열립니다.\n"
-            "로그인을 마치면 창이 자동으로 닫히고 아카콘 화면으로 넘어갑니다.",
+            "로그인을 마친 뒤 브라우저 창을 닫으면 아카콘 화면으로 넘어갑니다.",
             QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
         )
         if answer != QMessageBox.StandardButton.Ok:
@@ -1166,7 +1161,7 @@ class MainWindow(QMainWindow):
             return
 
         cancel = threading.Event()
-        progress = QProgressDialog("열린 브라우저 창에서 아카라이브에 로그인하세요…",
+        progress = QProgressDialog("열린 브라우저 창에서 아카라이브에 로그인한 뒤 창을 닫아 주세요…",
                                    "취소", 0, 0, self)
         progress.setWindowTitle("아카콘 로그인")
         progress.setWindowModality(Qt.WindowModality.WindowModal)

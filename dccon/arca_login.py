@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -63,13 +64,21 @@ class ArcaSession:
 
 
 def find_browser() -> str | None:
-    roots = [os.environ.get(k) for k in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA")]
-    candidates = [
-        Path(root) / rel
-        for rel in ("Google/Chrome/Application/chrome.exe",
-                    "Microsoft/Edge/Application/msedge.exe")
-        for root in roots if root
-    ]
+    if sys.platform == "darwin":
+        candidates = [
+            Path(root) / rel
+            for rel in ("Google Chrome.app/Contents/MacOS/Google Chrome",
+                        "Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
+            for root in ("/Applications", Path.home() / "Applications")
+        ]
+    else:
+        roots = [os.environ.get(k) for k in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA")]
+        candidates = [
+            Path(root) / rel
+            for rel in ("Google/Chrome/Application/chrome.exe",
+                        "Microsoft/Edge/Application/msedge.exe")
+            for root in roots if root
+        ]
     for path in candidates:
         if path.is_file():
             return str(path)
@@ -113,57 +122,69 @@ def _wait_port(profile: Path, cancel: threading.Event, timeout: float = 20) -> i
     raise LoginError("브라우저를 띄우지 못했습니다.")
 
 
-def login(cancel: threading.Event, timeout: float = 600) -> ArcaSession:
-    """로그인이 끝날 때까지 막는다. 워커 스레드에서 부른다."""
-    exe = find_browser()
-    if exe is None:
-        raise LoginError("Chrome 또는 Edge 를 찾을 수 없습니다.")
-    ARCA_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+def _wait_exit(proc: subprocess.Popen, cancel: threading.Event, timeout: float) -> None:
+    deadline = time.monotonic() + timeout
+    while proc.poll() is None:
+        if cancel.is_set():
+            proc.terminate()
+            raise CancelledError()
+        if time.monotonic() > deadline:
+            proc.terminate()
+            raise LoginError("로그인 시간이 지났습니다. 다시 시도해 주세요.")
+        time.sleep(0.5)
+
+
+def _read_session(exe: str, cancel: threading.Event) -> ArcaSession:
+    """창 없는 브라우저를 같은 프로필로 잠깐 띄워 쿠키만 꺼낸다."""
     try:
         (ARCA_PROFILE_DIR / "DevToolsActivePort").unlink()
     except OSError:
         pass
-    subprocess.Popen([
+    proc = subprocess.Popen([
         exe, f"--user-data-dir={ARCA_PROFILE_DIR}", "--remote-debugging-port=0",
+        "--headless=new", "--no-first-run", "--no-default-browser-check", "about:blank",
+    ])
+    try:
+        port = _wait_port(ARCA_PROFILE_DIR, cancel)
+        with httpx.Client(base_url=f"http://127.0.0.1:{port}", trust_env=False, timeout=5) as local:
+            version = local.get("/json/version").json()
+        ws_url = version["webSocketDebuggerUrl"]
+        raw = _cdp(ws_url, "Storage.getCookies").get("cookies", [])
+        try:
+            _cdp(ws_url, "Browser.close")
+        except Exception:  # noqa: BLE001 - 아래 terminate 로 정리된다
+            pass
+    finally:
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+    return ArcaSession(
+        # cf_clearance 는 UA 에 묶인다. 로그인한 창은 headless 가 아니었다.
+        user_agent=version.get("User-Agent", "").replace("HeadlessChrome", "Chrome"),
+        cookies=[
+            {k: c[k] for k in ("name", "value", "domain", "path")}
+            for c in raw if c.get("domain", "").lstrip(".").endswith("arca.live")
+        ],
+    )
+
+
+def login(cancel: threading.Event, timeout: float = 600) -> ArcaSession:
+    """로그인이 끝날 때까지 막는다. 워커 스레드에서 부른다.
+
+    로그인 창은 원격 디버깅 없이 평범하게 띄운다. 디버깅 포트가 열려 있으면
+    Cloudflare 봇 확인을 통과하지 못한다. 사용자가 창을 닫으면 쿠키를 읽는다.
+    """
+    exe = find_browser()
+    if exe is None:
+        raise LoginError("Chrome 또는 Edge 를 찾을 수 없습니다.")
+    ARCA_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.Popen([
+        exe, f"--user-data-dir={ARCA_PROFILE_DIR}",
         "--no-first-run", "--no-default-browser-check", "--new-window", LOGIN_URL,
     ])
-    port = _wait_port(ARCA_PROFILE_DIR, cancel)
-    local = httpx.Client(base_url=f"http://127.0.0.1:{port}", trust_env=False, timeout=5)
-
-    deadline = time.monotonic() + timeout
-    last_check = 0.0
-    try:
-        while time.monotonic() < deadline:
-            if cancel.is_set():
-                raise CancelledError()
-            time.sleep(1)
-            try:
-                pages = local.get("/json/list").json()
-            except (httpx.HTTPError, ValueError):
-                raise LoginError("로그인하기 전에 브라우저 창이 닫혔습니다.") from None
-            urls = [p.get("url", "") for p in pages if p.get("type") == "page"]
-            # 로그인 화면을 벗어나 아카라이브에 있을 때만 쿠키를 확인한다.
-            if not any(u.startswith(ARCA_BASE) and "/u/login" not in u for u in urls):
-                continue
-            if time.monotonic() - last_check < 3:
-                continue
-            last_check = time.monotonic()
-            version = local.get("/json/version").json()
-            ws_url = version["webSocketDebuggerUrl"]
-            raw = _cdp(ws_url, "Storage.getCookies").get("cookies", [])
-            session = ArcaSession(
-                user_agent=version.get("User-Agent", ""),
-                cookies=[
-                    {k: c[k] for k in ("name", "value", "domain", "path")}
-                    for c in raw if c.get("domain", "").lstrip(".").endswith("arca.live")
-                ],
-            )
-            if session.cookies and _is_logged_in(session):
-                try:
-                    _cdp(ws_url, "Browser.close")
-                except Exception:  # noqa: BLE001 - 창이 안 닫혀도 로그인은 끝났다
-                    pass
-                return session
-        raise LoginError("로그인 시간이 지났습니다. 다시 시도해 주세요.")
-    finally:
-        local.close()
+    _wait_exit(proc, cancel, timeout)
+    session = _read_session(exe, cancel)
+    if not (session.cookies and _is_logged_in(session)):
+        raise LoginError("로그인되지 않았습니다. 로그인을 마친 뒤 브라우저 창을 닫아 주세요.")
+    return session
