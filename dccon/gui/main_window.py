@@ -1,7 +1,7 @@
 """메인 윈도우.
 
-화면은 하나뿐이고 그 안에서 홈 / 검색결과 / 패키지 내부로 드릴다운한다.
-진행 상황은 하단 바가 맡는다.
+왼쪽 사이드바에서 사이트와 목록을 고르고, 오른쪽에서 홈 / 검색결과 /
+패키지 내부로 드릴다운한다. 선택과 진행 상황은 아래에 뜬 독이 맡는다.
 """
 
 from __future__ import annotations
@@ -27,14 +27,18 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QProgressBar,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from .. import api, updater
+from .. import api, arca, arca_login, updater
+from ..arca_login import ArcaSession
 from ..cache import ImageCache, MetaCache, cache_key
 from ..client import CancelledError, DcconClient, Throttle
 from ..config import Settings
@@ -51,7 +55,12 @@ from .motion import SmoothScrollArea, animate, motion_duration
 from .glow import DockShade, DownloadGlow
 
 HOME_TABS = [("day", "일간 인기"), ("week", "주간 인기"),
-             ("month", "월간 인기"), ("official", "공식"), ("all", "전체")]
+             ("month", "월간 인기"), ("official", "공식"), ("all", "전체 목록")]
+# 사이드바에서 디시콘 메뉴를 묶는 구역. (제목, 탭 키들)
+DC_SECTIONS = [("인기", ("day", "week", "month")), ("둘러보기", ("official", "all"))]
+SITES = [("dccon", "디시콘"), ("arca", "아카콘")]
+# 아카콘은 디시콘과 섞이지 않게 저장 폴더 안의 하위 폴더에 둔다.
+ARCA_SUBDIR = "arcacon"
 
 
 class ClickableLabel(QLabel):
@@ -84,7 +93,13 @@ class MainWindow(QMainWindow):
         # 마우스 4·5번 버튼은 자식 위젯이 먼저 삼키므로 앱 전역에서 가로챈다.
         QApplication.instance().installEventFilter(self)
         Card.animate_gifs = self.settings.animate_gifs
-        self.client = DcconClient(throttle=self._make_throttle())
+        self.site = "dccon"
+        self.dc_client = DcconClient(throttle=self._make_throttle())
+        self.arca_client = DcconClient(throttle=self._make_throttle(), headers=arca.HEADERS)
+        self.arca_session = ArcaSession.load()
+        if self.arca_session is not None:
+            self.arca_client.set_session(self.arca_session.user_agent, self.arca_session.jar())
+        self._login_task = None
         self.images = ImageCache()
         self.meta = MetaCache()
 
@@ -130,9 +145,18 @@ class MainWindow(QMainWindow):
         self._dl_results: list = []
 
         self._build_ui()
+        self._show_dock_page(0)
         self.show_home(self._home_kind)
         # 첫 화면 요청이 먼저 나가도록 조금 늦춘다.
         QTimer.singleShot(1500, self._startup_update_check)
+
+    @property
+    def client(self) -> DcconClient:
+        """지금 보고 있는 사이트의 클라이언트."""
+        return self.arca_client if self.site == "arca" else self.dc_client
+
+    def _client_for(self, site: str) -> DcconClient:
+        return self.arca_client if site == "arca" else self.dc_client
 
     # ------------------------------------------------------------------ UI
     def _make_throttle(self) -> Throttle:
@@ -142,15 +166,23 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         central = QWidget()
-        root = QVBoxLayout(central)
+        outer = QHBoxLayout(central)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(self._build_sidebar())
+
+        main = QWidget()
+        main.setObjectName("mainArea")
+        root = QVBoxLayout(main)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+        outer.addWidget(main, 1)
 
-        root.addWidget(self._build_topbar())
+        root.addWidget(self._build_searchbar())
 
         self.loading = QProgressBar()
         self.loading.setObjectName("loadingLine")
-        self.loading.setFixedHeight(3)
+        self.loading.setFixedHeight(2)
         self.loading.setTextVisible(False)
         self.loading.setRange(0, 0)
         root.addWidget(self.loading)
@@ -161,31 +193,15 @@ class MainWindow(QMainWindow):
         holder.setObjectName("gridHolder")
         # 스타일시트만으로는 스크롤 영역 안쪽 위젯이 칠해지지 않아 까맣게 뜬다.
         holder.setAutoFillBackground(True)
-        # 제목과 탭도 스크롤 안에 둔다. 내리면 같이 올라가 카드 자리가 넓어진다.
+        # 제목도 스크롤 안에 둔다. 내리면 같이 올라가 카드 자리가 넓어진다.
         content = QVBoxLayout(holder)
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(0)
-
-        heading = QFrame()
-        heading.setObjectName("viewHeader")
-        heading_row = QVBoxLayout(heading)
-        heading_row.setContentsMargins(28, 22, 28, 14)
-        heading_row.setSpacing(6)
-        self.crumb = QLabel()
-        self.crumb.setObjectName("crumb")
-        self.crumb.setWordWrap(True)
-        self.crumb.setTextFormat(Qt.TextFormat.PlainText)
-        heading_row.addWidget(self.crumb)
-        self.view_hint = QLabel("마음에 드는 패키지를 선택하세요. 더블클릭하면 안의 디시콘을 볼 수 있어요.")
-        self.view_hint.setObjectName("viewHint")
-        self.view_hint.setWordWrap(True)
-        heading_row.addWidget(self.view_hint)
-        content.addWidget(heading)
-        content.addWidget(self._build_tabs())
+        content.addWidget(self._build_heading())
 
         cards = QWidget()
-        self.grid = FlowLayout(cards, margin=28, spacing=16)
-        self.grid.setContentsMargins(28, 14, 28, 28)
+        self.grid = FlowLayout(cards, margin=22, spacing=10)
+        self.grid.setContentsMargins(22, 4, 22, 24)
         content.addWidget(cards)
         # 떠 있는 다운로드 독에 마지막 줄이 가리지 않도록 그만큼 비워둔다.
         self._dock_pad = QWidget()
@@ -202,22 +218,27 @@ class MainWindow(QMainWindow):
         root.addWidget(self.scroll, 1)
 
         # 독은 레이아웃에 넣지 않고 그리드 위에 띄운다. 자리는 _place_dock 이 잡는다.
-        dock_space = DockShade(central)
+        dock_space = DockShade(main)
         dock_space.setObjectName("dockSpace")
         dock_margin = QVBoxLayout(dock_space)
-        dock_margin.setContentsMargins(28, 14, 28, 20)
+        dock_margin.setContentsMargins(28, 8, 28, 16)
         dock = QFrame()
         dock.setObjectName("downloadDock")
+        dock.setMaximumWidth(620)
         dock_layout = QVBoxLayout(dock)
         dock_layout.setContentsMargins(1, 1, 1, 1)
         dock_layout.setSpacing(0)
-        dock_layout.addWidget(self._build_actionbar())
+        # 평소엔 선택 줄, 받는 동안엔 진행 줄. 한 번에 하나만 보인다.
+        self.dock_pages = QStackedWidget()
+        self.dock_pages.addWidget(self._build_actionbar())
 
         self.queue = QueueBar()
         self.queue.cancel_requested.connect(self._cancel_downloads)
         self.queue.pause_toggled.connect(self._set_paused)
-        self.queue.open_folder_requested.connect(self._open_download_folder)
-        dock_layout.addWidget(self.queue)
+        self.queue.dismissed.connect(lambda: self._show_dock_page(0))
+        self.dock_pages.addWidget(self.queue)
+        self.dock_pages.currentChanged.connect(lambda _: self._place_dock())
+        dock_layout.addWidget(self.dock_pages)
 
         # 독 위에 붙는 손잡이. 눌러서 다운로드 바를 아래로 숨긴다.
         handle_row = QHBoxLayout()
@@ -226,16 +247,20 @@ class MainWindow(QMainWindow):
         self.dock_toggle = QPushButton("▼")
         self.dock_toggle.setObjectName("dockToggle")
         self.dock_toggle.setCheckable(True)
-        # 높이는 스타일시트의 CSS 박스(내용 18 + 패딩 6 + 테두리 2)와 맞춰야
+        # 높이는 스타일시트의 CSS 박스(내용 14 + 패딩 4 + 테두리 2)와 맞춰야
         # 한다. 어긋나면 스타일시트가 나중에 최소 높이를 덮어써 찌그러진다.
-        self.dock_toggle.setFixedSize(56, 26)
+        self.dock_toggle.setFixedSize(44, 20)
         self.dock_toggle.setToolTip("다운로드 바 숨기기 / 보이기")
         self.dock_toggle.setAccessibleName("다운로드 바 숨기기 / 보이기")
         self.dock_toggle.toggled.connect(self._toggle_dock)
         handle_row.addWidget(self.dock_toggle)
         handle_row.addStretch(1)
         dock_margin.addLayout(handle_row)
-        dock_margin.addWidget(dock)
+        dock_row = QHBoxLayout()
+        dock_row.addStretch(1)
+        dock_row.addWidget(dock, 100)
+        dock_row.addStretch(1)
+        dock_margin.addLayout(dock_row)
 
         self.dock = dock
         self.dock_space = dock_space
@@ -251,8 +276,9 @@ class MainWindow(QMainWindow):
         dock_space.raise_()
 
         # 그리드 위로는 번지고 독 아래로는 깔리도록 사이에 끼운다.
-        self.glow = DownloadGlow(central)
+        self.glow = DownloadGlow(main)
         self.glow.stackUnder(dock_space)
+        self._main = main
 
         self.setCentralWidget(central)
 
@@ -268,7 +294,7 @@ class MainWindow(QMainWindow):
         self._place_glow()
 
     def _place_dock(self) -> None:
-        central = self.centralWidget()
+        central = getattr(self, "_main", None)
         if central is None or not hasattr(self, "dock_space"):
             return
         height = self.dock_space.sizeHint().height()
@@ -280,7 +306,7 @@ class MainWindow(QMainWindow):
         self._dock_pad.setFixedHeight(height - shift)
 
     def _place_glow(self) -> None:
-        central = self.centralWidget()
+        central = getattr(self, "_main", None)
         if central is None or not hasattr(self, "glow"):
             return
         height = min(DownloadGlow.HEIGHT, central.height())
@@ -304,36 +330,117 @@ class MainWindow(QMainWindow):
         self._dock_hidden = float(value)
         self._place_dock()
 
-    def _build_topbar(self) -> QWidget:
-        bar = QFrame()
-        bar.setObjectName("topBar")
-        row = QHBoxLayout(bar)
-        row.setContentsMargins(24, 18, 24, 18)
-        row.setSpacing(8)
+    def _build_sidebar(self) -> QWidget:
+        side = QFrame()
+        side.setObjectName("sidebar")
+        side.setFixedWidth(210)
+        col = QVBoxLayout(side)
+        col.setContentsMargins(12, 16, 12, 16)
+        col.setSpacing(2)
 
+        brand_row = QHBoxLayout()
+        brand_row.setContentsMargins(6, 0, 0, 14)
+        brand_row.setSpacing(10)
         brand = ClickableLabel("dccon")
         mark = ClickableLabel()
         # 앱 아이콘과 같은 로고. 고해상도 화면에서도 선명하도록 배율만큼 크게 줄인다.
         ratio = self.devicePixelRatioF()
         logo = QPixmap(str(Path(__file__).parent / "assets" / "icon.png")).scaled(
-            round(34 * ratio), round(34 * ratio),
+            round(28 * ratio), round(28 * ratio),
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation)
         logo.setDevicePixelRatio(ratio)
         mark.setPixmap(logo)
-        mark.setFixedSize(34, 34)
-        row.addWidget(mark)
+        mark.setFixedSize(28, 28)
         brand.setObjectName("brand")
-        row.addWidget(brand)
+        brand_row.addWidget(mark)
+        brand_row.addWidget(brand)
+        brand_row.addStretch(1)
         # 로고가 홈 버튼을 겸한다. 뒤로/앞으로는 마우스 4·5번 버튼이 맡는다.
-        for logo in (mark, brand):
-            logo.setToolTip("홈으로")
-            logo.setAccessibleName("홈으로")
-            logo.clicked.connect(lambda: self.show_home(self._home_kind))
-        row.addSpacing(12)
+        for widget in (mark, brand):
+            widget.setToolTip("홈으로")
+            widget.setAccessibleName("홈으로")
+            widget.clicked.connect(lambda: self.show_home(self._home_kind))
+        col.addLayout(brand_row)
+
+        seg = QFrame()
+        seg.setObjectName("segment")
+        seg_row = QHBoxLayout(seg)
+        seg_row.setContentsMargins(3, 3, 3, 3)
+        seg_row.setSpacing(2)
+        self._site_buttons: dict[str, QPushButton] = {}
+        for key, label in SITES:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setChecked(key == self.site)
+            btn.setObjectName("segButton")
+            btn.clicked.connect(lambda _=False, k=key: self._switch_site(k))
+            seg_row.addWidget(btn, 1)
+            self._site_buttons[key] = btn
+        col.addWidget(seg)
+        col.addSpacing(10)
+
+        # 사이트마다 메뉴가 다르다. 둘 다 만들어 두고 보이는 쪽만 바꾼다.
+        self._tab_buttons: dict[str, QPushButton] = {}
+        self._arca_tab_buttons: dict[str, QPushButton] = {}
+        labels = dict(HOME_TABS)
+        self._dc_nav = QWidget()
+        dc_col = QVBoxLayout(self._dc_nav)
+        dc_col.setContentsMargins(0, 0, 0, 0)
+        dc_col.setSpacing(2)
+        for title, keys in DC_SECTIONS:
+            dc_col.addWidget(self._nav_section(title))
+            for key in keys:
+                btn = self._nav_button(labels[key])
+                btn.clicked.connect(lambda _=False, k=key: self.show_home(k))
+                dc_col.addWidget(btn)
+                self._tab_buttons[key] = btn
+        col.addWidget(self._dc_nav)
+
+        self._arca_nav = QWidget()
+        arca_col = QVBoxLayout(self._arca_nav)
+        arca_col.setContentsMargins(0, 0, 0, 0)
+        arca_col.setSpacing(2)
+        arca_col.addWidget(self._nav_section("아카콘"))
+        for key, label in arca.ARCA_TABS:
+            btn = self._nav_button(label)
+            btn.clicked.connect(lambda _=False, k=key: self.show_home(k))
+            arca_col.addWidget(btn)
+            self._arca_tab_buttons[key] = btn
+        self._arca_nav.hide()
+        col.addWidget(self._arca_nav)
+
+        col.addStretch(1)
+        folder = self._nav_button("폴더 열기", checkable=False)
+        folder.clicked.connect(self._open_download_folder)
+        col.addWidget(folder)
+        cfg = self._nav_button("설정", checkable=False)
+        cfg.clicked.connect(self._open_settings)
+        col.addWidget(cfg)
+        return side
+
+    @staticmethod
+    def _nav_section(title: str) -> QLabel:
+        label = QLabel(title)
+        label.setObjectName("navSection")
+        return label
+
+    @staticmethod
+    def _nav_button(label: str, *, checkable: bool = True) -> QPushButton:
+        btn = QPushButton(label)
+        btn.setObjectName("navItem")
+        btn.setCheckable(checkable)
+        return btn
+
+    def _build_searchbar(self) -> QWidget:
+        bar = QFrame()
+        bar.setObjectName("searchBar")
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(22, 14, 22, 6)
+        row.setSpacing(8)
 
         self.search_type = QComboBox()
-        self.search_type.setMinimumWidth(84)
+        self.search_type.setMinimumWidth(76)
         for key, label in api.SEARCH_TYPES.items():
             self.search_type.addItem(label, key)
         row.addWidget(self.search_type)
@@ -343,80 +450,91 @@ class MainWindow(QMainWindow):
         self.omnibox.setMinimumWidth(180)
         self.omnibox.setClearButtonEnabled(True)
         self.omnibox.setAccessibleName("디시콘 검색")
-        self.omnibox.setToolTip("검색어, 패키지 ID 또는 URL을 입력하세요. Ctrl+L로 바로 이동")
+        self.omnibox.setToolTip("검색어, 패키지 ID 또는 URL을 입력하고 Enter. Ctrl+L로 바로 이동")
         self.omnibox.returnPressed.connect(self._on_omnibox)
         row.addWidget(self.omnibox, 1)
-
-        go = QPushButton("검색")
-        go.setObjectName("searchButton")
-        go.clicked.connect(self._on_omnibox)
-        row.addWidget(go)
-
-        cfg = QPushButton("설정")
-        cfg.clicked.connect(self._open_settings)
-        row.addWidget(cfg)
         return bar
 
-    def _build_tabs(self) -> QWidget:
-        self.tabs = QFrame()
-        self.tabs.setObjectName("tabBar")
-        row = QHBoxLayout(self.tabs)
-        row.setContentsMargins(28, 0, 28, 14)
-        row.setSpacing(6)
-        self._tab_buttons: dict[str, QPushButton] = {}
-        for key, label in HOME_TABS:
-            btn = QPushButton(label)
-            btn.setCheckable(True)
-            btn.setObjectName("tabButton")
-            btn.clicked.connect(lambda _=False, k=key: self.show_home(k))
-            row.addWidget(btn)
-            self._tab_buttons[key] = btn
-        row.addStretch(1)
+    def _build_heading(self) -> QWidget:
+        heading = QFrame()
+        heading.setObjectName("viewHeader")
+        col = QVBoxLayout(heading)
+        col.setContentsMargins(28, 18, 28, 12)
+        col.setSpacing(4)
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        self.crumb = QLabel()
+        self.crumb.setObjectName("crumb")
+        self.crumb.setTextFormat(Qt.TextFormat.PlainText)
+        row.addWidget(self.crumb, 0, Qt.AlignmentFlag.AlignBottom)
         self.result_label = QLabel()
         self.result_label.setObjectName("resultCount")
-        row.addWidget(self.result_label)
-        return self.tabs
+        row.addWidget(self.result_label, 0, Qt.AlignmentFlag.AlignBottom)
+        row.addStretch(1)
+
+        self.prev_btn = QPushButton("‹")
+        self.prev_btn.setObjectName("ghost")
+        self.prev_btn.setFixedWidth(32)
+        self.prev_btn.setToolTip("이전 페이지")
+        self.prev_btn.clicked.connect(lambda: self._step_page(-1))
+        row.addWidget(self.prev_btn)
+        # 전체 목록은 6천 페이지가 넘어서 이전/다음만으로는 못 다닌다.
+        self.page_label = QPushButton("")
+        self.page_label.setObjectName("ghost")
+        self.page_label.setToolTip("눌러서 원하는 페이지로 이동")
+        self.page_label.clicked.connect(self._jump_page)
+        row.addWidget(self.page_label)
+        self.next_btn = QPushButton("›")
+        self.next_btn.setObjectName("ghost")
+        self.next_btn.setFixedWidth(32)
+        self.next_btn.setToolTip("다음 페이지")
+        self.next_btn.clicked.connect(lambda: self._step_page(1))
+        row.addWidget(self.next_btn)
+        col.addLayout(row)
+
+        self.view_hint = QLabel("마음에 드는 패키지를 선택하세요. 더블클릭하면 안의 디시콘을 볼 수 있어요.")
+        self.view_hint.setObjectName("viewHint")
+        self.view_hint.setWordWrap(True)
+        col.addWidget(self.view_hint)
+        return heading
 
     def _build_actionbar(self) -> QWidget:
         bar = QFrame()
         bar.setObjectName("actionBar")
         row = QHBoxLayout(bar)
-        row.setContentsMargins(24, 14, 24, 14)
-        row.setSpacing(8)
+        row.setContentsMargins(16, 8, 8, 8)
+        row.setSpacing(6)
 
-        self.select_all_btn = QPushButton("전체 선택")
-        self.select_all_btn.clicked.connect(lambda: self._set_all_checked(True))
-        row.addWidget(self.select_all_btn)
+        self.sel_label = QLabel("0개 선택")
+        self.sel_label.setObjectName("selLabel")
+        row.addWidget(self.sel_label)
+        row.addStretch(1)
 
         self.clear_sel_btn = QPushButton("선택 해제")
+        self.clear_sel_btn.setObjectName("ghost")
         self.clear_sel_btn.clicked.connect(lambda: self._set_all_checked(False))
         row.addWidget(self.clear_sel_btn)
 
-        row.addStretch(1)
+        self.select_all_btn = QPushButton("전체 선택")
+        self.select_all_btn.setObjectName("ghost")
+        self.select_all_btn.clicked.connect(lambda: self._set_all_checked(True))
+        row.addWidget(self.select_all_btn)
 
-        self.prev_btn = QPushButton("◀ 이전")
-        self.prev_btn.clicked.connect(lambda: self._step_page(-1))
-        row.addWidget(self.prev_btn)
-        # 전체 목록은 6천 페이지가 넘어서 이전/다음만으로는 못 다닌다.
-        self.page_label = QPushButton("")
-        self.page_label.setToolTip("눌러서 원하는 페이지로 이동")
-        self.page_label.clicked.connect(self._jump_page)
-        row.addWidget(self.page_label)
-        self.next_btn = QPushButton("다음 ▶")
-        self.next_btn.clicked.connect(lambda: self._step_page(1))
-        row.addWidget(self.next_btn)
-
-        row.addStretch(1)
-
-        self.sel_label = QLabel("선택 0개")
-        self.sel_label.setObjectName("selLabel")
-        row.addWidget(self.sel_label)
-
-        self.download_btn = QPushButton("선택 다운로드")
+        self.download_btn = QPushButton("다운로드")
         self.download_btn.setObjectName("primary")
         self.download_btn.clicked.connect(self._on_download)
         row.addWidget(self.download_btn)
         return bar
+
+    def _show_dock_page(self, index: int) -> None:
+        self.dock_pages.setCurrentIndex(index)
+        # 쌓인 위젯 중 큰 쪽 높이를 따르지 않게 지금 페이지 크기로 맞춘다.
+        for i in range(self.dock_pages.count()):
+            page = self.dock_pages.widget(i)
+            policy = QSizePolicy.Policy.Preferred if i == index else QSizePolicy.Policy.Ignored
+            page.setSizePolicy(QSizePolicy.Policy.Preferred, policy)
+        self.dock_pages.adjustSize()
+        self._place_dock()
 
     # ---------------------------------------------------------- 네비게이션
     def _begin_view(self, crumb: str) -> int:
@@ -448,6 +566,9 @@ class MainWindow(QMainWindow):
         return self._generation
 
     def show_home(self, kind: str = "day") -> None:
+        if self.site == "arca":
+            self.show_arca(kind if kind in dict(arca.ARCA_TABS) else "new", 1)
+            return
         if kind == "all":
             self.show_all(1)
             return
@@ -458,7 +579,6 @@ class MainWindow(QMainWindow):
         self._search = None
         self._all = None
         self._package = None
-        self.tabs.show()
         for key, btn in self._tab_buttons.items():
             btn.setChecked(key == kind)
         self._set_pagination(visible=False)
@@ -477,7 +597,6 @@ class MainWindow(QMainWindow):
         self._home_kind = "all"
         self._search = None
         self._package = None
-        self.tabs.show()
         for key, btn in self._tab_buttons.items():
             btn.setChecked(key == "all")
         gen = self._begin_view("전체 디시콘")
@@ -502,18 +621,48 @@ class MainWindow(QMainWindow):
 
         self._run(lambda: api.fetch_all(self.client, page), done)
 
+    def show_arca(self, kind: str = "new", page: int = 1) -> None:
+        """아카콘 목록. 탭마다 페이지가 있다."""
+        if self._home_kind != kind:
+            self._all = None
+        self._view = "home"
+        self._home_kind = kind
+        self._search = None
+        self._package = None
+        for key, btn in self._arca_tab_buttons.items():
+            btn.setChecked(key == kind)
+        gen = self._begin_view(f"{dict(arca.ARCA_TABS).get(kind, '최신')} 아카콘")
+        self._set_pagination(visible=True)
+        known = self._all[1] if self._all else page
+        self._all = (page, max(page, known))
+        self._set_page_label(*self._all)
+        client = self.client
+
+        def done(payload):
+            rows, pages = payload
+            self._all = (page, max(pages, self._all[1] if self._all else pages))
+            self._set_page_label(*self._all)
+            if not rows:
+                self._show_empty("이 페이지에는 아카콘이 없습니다.")
+                return
+            self._fill_packages(gen, rows)
+
+        self._run(lambda: arca.fetch_list(client, kind, page), done)
+
     def show_search(self, word: str, search_type: str = "title", page: int = 1) -> None:
         self._view = "search"
         if not self._navigating:
             self._forward.clear()
         self._all = None
         self._package = None
-        self.tabs.hide()
         gen = self._begin_view(f"“{word}” 검색 결과")
         self._set_pagination(visible=True)
+        site, client = self.site, self.client
 
         def work():
-            return api.search_packages(self.client, word, search_type, page)
+            if site == "arca":
+                return arca.search(client, word, search_type, page)
+            return api.search_packages(client, word, search_type, page)
 
         def done(payload):
             rows, pages = payload
@@ -534,7 +683,6 @@ class MainWindow(QMainWindow):
             self._history.append(self._snapshot())
             self._forward.clear()
         self._view = "package"
-        self.tabs.hide()
         self._set_pagination(visible=False)
         gen = self._begin_view("불러오는 중…")
 
@@ -549,7 +697,8 @@ class MainWindow(QMainWindow):
             self.view_hint.setText(f"{sub} · 저장할 디시콘을 선택하세요.")
             self._fill_items(gen, package)
 
-        self._run(lambda: self._load_package(package_idx), done)
+        site = self.site
+        self._run(lambda: self._load_package(package_idx, site=site), done)
 
     def _snapshot(self) -> tuple:
         if self._view == "package" and self._package:
@@ -557,6 +706,8 @@ class MainWindow(QMainWindow):
         if self._view == "search" and self._search:
             word, stype, page, _ = self._search
             return ("search", word, stype, page)
+        if self.site == "arca":
+            return ("arca", self._home_kind, self._all[0] if self._all else 1)
         if self._home_kind == "all" and self._all:
             return ("all", self._all[0])
         return ("home", self._home_kind)
@@ -570,6 +721,8 @@ class MainWindow(QMainWindow):
                 self.show_all(state[1])
             elif state[0] == "package":
                 self._open_package(state[1], record=False)
+            elif state[0] == "arca":
+                self.show_arca(state[1], state[2])
             else:
                 self.show_home(state[1])
         finally:
@@ -608,7 +761,8 @@ class MainWindow(QMainWindow):
     def _current_pages(self) -> tuple[int, int] | None:
         if self._view == "search" and self._search:
             return self._search[2], self._search[3]
-        if self._view == "home" and self._home_kind == "all" and self._all:
+        if self._view == "home" and self._all and (
+                self.site == "arca" or self._home_kind == "all"):
             return self._all
         return None
 
@@ -616,6 +770,8 @@ class MainWindow(QMainWindow):
         if self._view == "search" and self._search:
             word, stype, _, _ = self._search
             self.show_search(word, stype, target)
+        elif self.site == "arca":
+            self.show_arca(self._home_kind, target)
         elif self._home_kind == "all":
             self.show_all(target)
 
@@ -683,7 +839,10 @@ class MainWindow(QMainWindow):
             card.toggled.connect(self._update_selection)
             self.grid.addWidget(card)
             self._cards.append((card, item))
-            self._queue_thumb(gen, card, item.url, item.ext)
+            if item.thumb:
+                self._queue_thumb(gen, card, item.thumb, "jpg")
+            else:
+                self._queue_thumb(gen, card, item.url, item.ext)
         self._update_selection()
         self._reveal_grid()
 
@@ -711,9 +870,10 @@ class MainWindow(QMainWindow):
         waiting.append(card)
         if len(waiting) > 1:
             return  # 같은 이미지는 한 번만 받는다
+        client = self.client
         task = ThumbTask(
             self.thumb_signals, gen, key,
-            lambda: self.images.get(self.client, url, ext, cancel=None),
+            lambda: self.images.get(client, url, ext, cancel=None),
         )
         self._inflight.add(task)
         self.thumb_pool.start(task)
@@ -738,11 +898,21 @@ class MainWindow(QMainWindow):
     def _update_selection(self, *_) -> None:
         count = sum(1 for card, _ in self._cards if card.checked)
         noun = "개" if self._view == "package" else "개 패키지"
-        self.sel_label.setText(f"선택 {count}{noun}")
+        self.sel_label.setText(f"{count}{noun} 선택")
         self.download_btn.setEnabled(count > 0)
 
     # ------------------------------------------------------- 검색창 해석
     def _on_omnibox(self) -> None:
+        if self.site == "arca":
+            text = self.omnibox.text().strip()
+            ids = arca.parse_ids(text)
+            if ids and len(ids) == 1:
+                self.open_package(ids[0])
+            elif ids:
+                self._start_downloads([(i, f"#{i}", None) for i in ids])
+            elif text:
+                self.show_search(text, self.search_type.currentData(), 1)
+            return
         kind, value = api.parse_query(self.omnibox.text())
         if kind == "ids":
             ids = list(value)
@@ -774,7 +944,10 @@ class MainWindow(QMainWindow):
             self._start_downloads(jobs)
 
     def _start_downloads(self, jobs: list[tuple[int, str, list[int] | None]]) -> None:
+        site = self.site
         dest = Path(self.settings.download_dir)
+        if site == "arca":
+            dest = dest / ARCA_SUBDIR
         try:
             dest.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -786,23 +959,26 @@ class MainWindow(QMainWindow):
         self._dl_results.clear()
         self._dl_remaining = len(jobs)
         self.queue.start([(idx, title) for idx, title, _ in jobs])
+        self._show_dock_page(1)
+        if self.dock_toggle.isChecked():
+            self.dock_toggle.setChecked(False)
         self.glow.start()
-        self.client.resume()
+        self._resume_clients()
 
         for package_idx, _title, sorts in jobs:
             task = Task(
-                self._download_one, package_idx, sorts, dest, self._cancel,
+                self._download_one, site, package_idx, sorts, dest, self._cancel,
                 parent=self,
             )
             task.signals.finished.connect(self._inflight.discard)
             self._inflight.add(task)
             self.dl_pool.start(task)
 
-    def _download_one(self, package_idx: int, sorts, dest: Path,
+    def _download_one(self, site: str, package_idx: int, sorts, dest: Path,
                       cancel: threading.Event) -> None:
         """워커 스레드. UI는 시그널로만 건드린다."""
         try:
-            package = self._load_package(package_idx, cancel=cancel)
+            package = self._load_package(package_idx, cancel=cancel, site=site)
         except CancelledError:
             self.dl_signals.package_error.emit(package_idx, "중단됨")
             self._finish_one()
@@ -817,7 +993,7 @@ class MainWindow(QMainWindow):
 
         try:
             result = download_package(
-                self.client,
+                self._client_for(site),
                 self.images,
                 package,
                 dest,
@@ -840,11 +1016,14 @@ class MainWindow(QMainWindow):
         if self._dl_remaining <= 0:
             self.dl_signals.all_done.emit()
 
-    def _load_package(self, package_idx: int, cancel=None) -> Package:
+    def _load_package(self, package_idx: int, cancel=None, site: str = "dccon") -> Package:
+        if site == "arca":
+            # 이미지 주소 서명이 만료되므로 상세는 캐시하지 않는다.
+            return arca.fetch_package(self.arca_client, package_idx, cancel=cancel)
         cached = self.meta.load(package_idx)
         if cached:
             return Package.from_api(cached)
-        resp = self.client.post(
+        resp = self.dc_client.post(
             api.PACKAGE_DETAIL_URL,
             data={"package_idx": str(package_idx)},
             headers={"X-Requested-With": "XMLHttpRequest"},
@@ -890,15 +1069,18 @@ class MainWindow(QMainWindow):
 
     def _cancel_downloads(self) -> None:
         self._cancel.set()
-        self.client.resume()
+        self._resume_clients()
         self.queue.set_idle("중단하는 중…")
         self.glow.stop()
 
+    def _resume_clients(self) -> None:
+        for client in (self.dc_client, self.arca_client):
+            client.resume()
+
     def _set_paused(self, paused: bool) -> None:
-        if paused:
-            self.client.pause()
-        else:
-            self.client.resume()
+        # 받는 중인 사이트가 지금 보는 사이트와 다를 수 있어 둘 다 건드린다.
+        for client in (self.dc_client, self.arca_client):
+            client.pause() if paused else client.resume()
 
     def _open_download_folder(self) -> None:
         path = Path(self.settings.download_dir)
@@ -925,7 +1107,103 @@ class MainWindow(QMainWindow):
         self.nav_pool.start(task)
 
     def _on_nav_error(self, message: str) -> None:
+        if message == arca.LOGIN_REQUIRED_MSG:
+            # 저장해 둔 쿠키가 만료됐다. 버리고 다시 로그인시킨다.
+            self.arca_session = None
+            ArcaSession.forget()
+            self._show_empty("아카라이브 로그인이 만료되었습니다.")
+            self._require_login()
+            return
         self._show_empty(f"불러오지 못했습니다.\n{message}")
+
+    # ------------------------------------------------------- 사이트 전환
+    def _sync_site_buttons(self) -> None:
+        for key, btn in self._site_buttons.items():
+            btn.setChecked(key == self.site)
+
+    def _switch_site(self, site: str) -> None:
+        if site == "arca" and self.arca_session is None:
+            self._sync_site_buttons()
+            self._require_login()
+            return
+        if site != self.site:
+            self._set_site(site)
+        self._sync_site_buttons()
+
+    def _set_site(self, site: str) -> None:
+        self.site = site
+        self._history.clear()
+        self._all = None
+        self._sync_site_buttons()
+        is_arca = site == "arca"
+        self._dc_nav.setVisible(not is_arca)
+        self._arca_nav.setVisible(is_arca)
+        with QSignalBlocker(self.search_type):
+            self.search_type.clear()
+            for key, label in (arca.SEARCH_TYPES if is_arca else api.SEARCH_TYPES).items():
+                self.search_type.addItem(label, key)
+        self.omnibox.setPlaceholderText(
+            "검색어, 아카콘 번호 또는 arca.live/e/ 주소" if is_arca
+            else "검색어, 패키지 ID 또는 디시콘 URL"
+        )
+        self._home_kind = "new" if is_arca else "day"
+        self.show_home(self._home_kind)
+
+    def _require_login(self) -> None:
+        """로그인 알림창 -> 브라우저 로그인 -> 쿠키 저장 -> 아카콘 화면."""
+        if self._login_task is not None:
+            return
+        answer = QMessageBox.information(
+            self, "아카콘 로그인",
+            "아카콘을 보려면 아카라이브 로그인이 필요합니다.\n\n"
+            "확인을 누르면 로그인 창(Chrome 또는 Edge)이 열립니다.\n"
+            "로그인을 마치면 창이 자동으로 닫히고 아카콘 화면으로 넘어갑니다.",
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Ok:
+            if self.site == "arca":
+                self._set_site("dccon")
+            return
+
+        cancel = threading.Event()
+        progress = QProgressDialog("열린 브라우저 창에서 아카라이브에 로그인하세요…",
+                                   "취소", 0, 0, self)
+        progress.setWindowTitle("아카콘 로그인")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.canceled.connect(cancel.set)
+        progress.show()
+
+        task = Task(arca_login.login, cancel, parent=self)
+        task.cancel = cancel
+        self._login_task = task
+
+        def finish():
+            self._login_task = None
+            progress.reset()
+            progress.deleteLater()
+
+        def done(session: ArcaSession) -> None:
+            finish()
+            session.save()
+            self.arca_session = session
+            self.arca_client.set_session(session.user_agent, session.jar())
+            if self.site == "arca":
+                self.show_home(self._home_kind)
+            else:
+                self._set_site("arca")
+
+        def failed(message: str) -> None:
+            finish()
+            if not cancel.is_set():
+                QMessageBox.warning(self, "아카콘 로그인", f"로그인하지 못했습니다.\n{message}")
+            if self.site == "arca":
+                self._set_site("dccon")
+
+        task.signals.done.connect(done)
+        task.signals.error.connect(failed)
+        # 몇 분씩 걸릴 수 있어 화면 요청용 풀을 막지 않게 따로 돌린다.
+        QThreadPool.globalInstance().start(task)
 
     def _open_settings(self) -> None:
         dialog = SettingsDialog(self.settings, self.images, self)
@@ -1003,7 +1281,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self._cancel.set()
-        self.client.resume()
+        self._resume_clients()
+        if self._login_task is not None:
+            self._login_task.cancel.set()
         for pool in (self.thumb_pool, self.nav_pool, self.dl_pool):
             pool.clear()
         self.settings.save()
@@ -1011,5 +1291,6 @@ class MainWindow(QMainWindow):
         # 이미 사라진 시그널 객체에 emit 하면서 시끄럽게 죽는다.
         for pool in (self.thumb_pool, self.nav_pool, self.dl_pool):
             pool.waitForDone(2000)
-        self.client.close()
+        self.dc_client.close()
+        self.arca_client.close()
         super().closeEvent(event)

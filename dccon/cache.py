@@ -21,9 +21,12 @@ _NO_PARAM = re.compile(r"[?&]no=([^&]+)")
 
 
 def cache_key(url_or_path: str) -> str:
-    """`no=` 값만 뽑아 키로 쓴다. 뒤에 붙는 &date= 는 무시."""
+    """`no=` 값만 뽑아 키로 쓴다. 뒤에 붙는 &date= 는 무시.
+
+    `no=` 가 없으면(아카콘) 쿼리를 통째로 뗀다. ?expires=&key= 서명이 매번 바뀐다.
+    """
     m = _NO_PARAM.search(url_or_path)
-    token = m.group(1) if m else url_or_path
+    token = m.group(1) if m else url_or_path.split("?", 1)[0]
     token = urllib.parse.unquote(token)
     return hashlib.sha1(token.encode("utf-8")).hexdigest()
 

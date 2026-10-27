@@ -25,6 +25,8 @@ CACHE_DIR = DATA_DIR / "cache"
 IMAGE_CACHE_DIR = CACHE_DIR / "img"
 META_CACHE_DIR = CACHE_DIR / "meta"
 SETTINGS_PATH = DATA_DIR / "settings.json"
+ARCA_SESSION_PATH = DATA_DIR / "arca_session.json"
+ARCA_PROFILE_DIR = DATA_DIR / "arca_browser"
 
 
 def default_download_dir() -> Path:

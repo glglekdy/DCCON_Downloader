@@ -12,14 +12,8 @@ from PySide6.QtWidgets import QCheckBox, QFrame, QLabel, QSizePolicy, QVBoxLayou
 from . import theme
 from .motion import animate
 
-CARD_W = 180
-THUMB = 152
-
-
-def blend(first: QColor | str, second: QColor | str, amount: float) -> QColor:
-    a, b = QColor(first), QColor(second)
-    return QColor(*(round(x + (y - x) * amount) for x, y in zip(
-        a.getRgb(), b.getRgb())))
+CARD_W = 156
+THUMB = 144
 
 
 class Preview(QLabel):
@@ -81,7 +75,7 @@ class Preview(QLabel):
     def set_source(self, pix):
         # Resample once on arrival, not on every hover/scroll animation frame.
         ratio = self.devicePixelRatioF()
-        size = round((THUMB - 16) * ratio)
+        size = round(THUMB * ratio)
         self.source = pix.scaled(QSize(size, size), Qt.AspectRatioMode.KeepAspectRatio,
                                  Qt.TransformationMode.SmoothTransformation)
         self.source.setDevicePixelRatio(ratio)
@@ -93,7 +87,7 @@ class Preview(QLabel):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         clip = QPainterPath()
-        clip.addRoundedRect(QRectF(self.rect()), 12, 12)
+        clip.addRoundedRect(QRectF(self.rect()), 6, 6)
         painter.setClipPath(clip)
         painter.fillRect(self.rect(), theme.color("thumb_bg"))
         size = self.source.deviceIndependentSize()
@@ -119,13 +113,14 @@ class Card(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._hover = 0.0
+        self._hovered = False
         self._selection = 0.0
         self._hover_motion = QPropertyAnimation(self, b"hoverAmount", self)
         self._select_motion = QPropertyAnimation(self, b"selectionAmount", self)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 16, 12, 16)
-        layout.setSpacing(8)
+        layout.setContentsMargins(6, 6, 6, 8)  # 선택 테두리가 썸네일 밖 2px 에 그려진다
+        layout.setSpacing(2)
 
         self.thumb = Preview()
         self.thumb.setFixedSize(THUMB, THUMB)
@@ -137,7 +132,9 @@ class Card(QFrame):
         if checkable:
             self.check = QCheckBox(self)
             self.check.setObjectName("cardCheck")
-            self.check.move(18, 22)
+            self.check.move(12, 12)
+            # 마우스를 올렸거나 선택했을 때만 보인다.
+            self.check.hide()
             self.check.setAccessibleName(f"{title} 선택")
             self.check.raise_()
             self.check.toggled.connect(self._on_toggled)
@@ -149,7 +146,8 @@ class Card(QFrame):
         self.title_label.setFixedWidth(THUMB)
         self.title_label.setToolTip(title)
         self._set_elided(self.title_label, title)
-        layout.addWidget(self.title_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(6)
+        layout.addWidget(self.title_label)
 
         self.subtitle_label = QLabel()
         self.subtitle_label.setObjectName("cardSubtitle")
@@ -159,7 +157,7 @@ class Card(QFrame):
         if subtitle:
             self._set_elided(self.subtitle_label, subtitle)
             self.subtitle_label.setToolTip(subtitle)
-        layout.addWidget(self.subtitle_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self.subtitle_label)
 
     def _set_elided(self, label: QLabel, text: str) -> None:
         metrics = label.fontMetrics()
@@ -171,7 +169,12 @@ class Card(QFrame):
         else:
             self._select_motion.stop()
             self._set_selection(float(state))
+        self._sync_check()
         self.toggled.emit(state)
+
+    def _sync_check(self) -> None:
+        if self.check is not None:
+            self.check.setVisible(self._hovered or self.check.isChecked())
 
     def _set_hover(self, value):
         self._hover = value
@@ -185,31 +188,34 @@ class Card(QFrame):
     selectionAmount = Property(float, lambda self: self._selection, _set_selection)
 
     def enterEvent(self, event):  # noqa: N802
-        animate(self._hover_motion, 1.0, 180)
+        self._hovered = True
+        self._sync_check()
+        animate(self._hover_motion, 1.0, 120)
         super().enterEvent(event)
 
     def leaveEvent(self, event):  # noqa: N802
-        animate(self._hover_motion, 0.0, 240)
+        self._hovered = False
+        self._sync_check()
+        animate(self._hover_motion, 0.0, 160)
         super().leaveEvent(event)
 
     def paintEvent(self, event):  # noqa: N802
+        # 평소엔 바탕 없이 썸네일만. 올리거나 고르면 카드 바탕이 깔리고,
+        # 고른 카드는 썸네일 둘레에 강조색 테두리가 생긴다.
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        surface = QRectF(2, 5 - self._hover * 3, self.width()-4, self.height()-10)
         painter.setPen(Qt.PenStyle.NoPen)
-        shadow = theme.color("card_shadow")
-        # 어두운 바탕에서는 그림자가 묻히니 더 진하게 깐다.
-        depth = 4 if theme.is_dark() else 1
-        for spread in (3, 2, 1):
-            shadow.setAlpha(int((3 + self._hover * 4) * depth))
-            painter.setBrush(shadow)
-            painter.drawRoundedRect(surface.adjusted(-spread/2, 2, spread/2, spread+2), 16, 16)
-        painter.setBrush(blend(theme.color("card_bg"), theme.color("card_selected_bg"),
-                               self._selection))
-        border = blend(theme.color("card_border"), theme.color("card_hover_border"), self._hover)
-        border = blend(border, theme.color("accent"), self._selection)
-        painter.setPen(QPen(border, 1 + self._selection))
-        painter.drawRoundedRect(surface, 15, 15)
+        bg = theme.color("card_bg")
+        bg.setAlphaF(max(self._hover, self._selection))
+        painter.setBrush(bg)
+        painter.drawRoundedRect(QRectF(self.rect()), 8, 8)
+        if self._selection > 0:
+            accent = theme.color("accent")
+            accent.setAlphaF(self._selection)
+            painter.setPen(QPen(accent, 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(
+                QRectF(self.thumb.geometry()).adjusted(-2, -2, 2, 2), 8, 8)
 
     # ---- 외부에서 쓰는 것들 ---------------------------------------------
     def set_image(self, data: bytes) -> None:
@@ -237,6 +243,7 @@ class Card(QFrame):
                     self.check.setChecked(value)
                 self._select_motion.stop()
                 self._set_selection(float(value))
+                self._sync_check()
                 if changed:
                     self.toggled.emit(value)
 

@@ -45,7 +45,7 @@ class DockShade(QWidget):
                                     min(255, round(alpha * boost))))
             painter.drawRoundedRect(
                 base.adjusted(-spread, -spread * 0.4, spread, spread + 2),
-                20 + spread, 20 + spread)
+                12 + spread, 12 + spread)
 
 
 class DownloadGlow(QWidget):
