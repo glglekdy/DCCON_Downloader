@@ -19,6 +19,7 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["sync"] }
 tokio-util = "0.7"
 percent-encoding = "2"
+url = "2"
 
 [features]
 console = []

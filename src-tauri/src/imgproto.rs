@@ -16,6 +16,29 @@ use crate::state::AppState;
 
 type Headers = Vec<(String, String)>;
 
+/// 받아도 되는 호스트(자기 자신 또는 그 하위 도메인). 새 이미지 CDN 이 생기면 여기에 추가해야 한다.
+/// 사이트 클라이언트가 Referer·쿠키를 붙이므로, 목록 밖 주소로는 요청을 보내지 않는다.
+const ALLOWED_HOSTS: &[&str] = &["dcinside.com", "dcinside.co.kr", "arca.live", "namu.la"];
+
+fn url_allowed(raw: &str) -> bool {
+    let Ok(u) = url::Url::parse(raw) else { return false };
+    if !matches!(u.scheme(), "http" | "https") {
+        return false;
+    }
+    let Some(host) = u.host_str() else { return false };
+    let host = host.to_ascii_lowercase();
+    // 테스트의 wiremock 서버(루프백)만 허용. 제품 빌드에는 들어가지 않는다.
+    #[cfg(test)]
+    if host == "127.0.0.1" || host == "localhost" {
+        return true;
+    }
+    ALLOWED_HOSTS.iter().any(|d| host == *d || host.ends_with(&format!(".{d}")))
+}
+
+fn ext_allowed(ext: &str) -> bool {
+    (1..=5).contains(&ext.len()) && ext.bytes().all(|b| b.is_ascii_alphanumeric())
+}
+
 fn content_type(ext: &str) -> &'static str {
     match ext.trim_start_matches('.').to_lowercase().as_str() {
         "png" => "image/png",
@@ -119,7 +142,14 @@ pub(crate) async fn serve(
         Some(u) if !u.is_empty() => u,
         _ => return reply(400, vec![], Vec::new()),
     };
+    if !url_allowed(&url) {
+        return reply(400, vec![], Vec::new());
+    }
     let ext = param(query, "e").unwrap_or_default();
+    if !ext_allowed(&ext) {
+        return reply(400, vec![], Vec::new());
+    }
+    // g 가 없거나 숫자가 아니면 현재 세대로 본다(버리지 않는다).
     let generation = param(query, "g").and_then(|g| g.parse::<u64>().ok());
     let site = match param(query, "s").as_deref() {
         Some("arca") => Site::Arca,
@@ -285,5 +315,50 @@ mod tests {
     async fn missing_url_is_400() {
         let (st, _d) = state();
         assert_eq!(serve(&st, "e=png&g=0", None).await.0, 400);
+    }
+
+    #[test]
+    fn accepts_listed_host_suffix() {
+        assert!(url_allowed("https://dcimg5.dcinside.com/dccon.php?no=x"));
+        assert!(url_allowed("https://ac.namu.la/x.png"));
+        assert!(url_allowed("http://arca.live/a"));
+        assert!(!url_allowed("https://evildcinside.com/"));
+        assert!(!url_allowed("https://dcinside.com.evil.com/"));
+    }
+
+    #[tokio::test]
+    async fn rejects_non_http_scheme() {
+        let (st, _d) = state();
+        let (code, h, _) = serve(&st, &q("file:///C:/x", "png", 0), None).await;
+        assert_eq!(code, 400);
+        assert_eq!(hdr(&h, "Access-Control-Allow-Origin"), Some("*"));
+    }
+
+    #[tokio::test]
+    async fn rejects_unlisted_host() {
+        let (st, _d) = state();
+        let (code, _, _) = serve(&st, &q("https://example.com/a.png", "png", 0), None).await;
+        assert_eq!(code, 400);
+    }
+
+    #[tokio::test]
+    async fn rejects_traversal_ext() {
+        let (st, _d) = state();
+        let s = server(200, b"x").await;
+        let url = format!("{}/a.png?no=9", s.uri());
+        let (code, _, _) = serve(&st, &q(&url, "./../../x", 0), None).await;
+        assert_eq!(code, 400);
+        assert!(s.received_requests().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn missing_generation_is_current() {
+        let (st, _d) = state();
+        let s = server(200, b"ok").await;
+        st.view_gen.store(7, Ordering::SeqCst);
+        let url = format!("{}/a.png?no=8", s.uri());
+        let enc = percent_encoding::utf8_percent_encode(&url, percent_encoding::NON_ALPHANUMERIC);
+        let (code, _, body) = serve(&st, &format!("u={enc}&e=png"), None).await;
+        assert_eq!((code, body.as_slice()), (200, &b"ok"[..]));
     }
 }
