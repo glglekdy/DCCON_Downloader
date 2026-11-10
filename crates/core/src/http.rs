@@ -89,12 +89,23 @@ struct Session {
     cookie: Option<String>,
 }
 
+/// 사용자 정지와 429 자동 정지를 따로 기록한다.
+#[derive(Default)]
+struct PauseState {
+    user: bool,
+    /// 진행 중인 자동 정지의 세대. 타이머는 자기 세대만 푼다.
+    auto: Option<u64>,
+    next_gen: u64,
+}
+
 struct Inner {
     http: reqwest::Client,
     referer: String,
     session: RwLock<Session>,
     throttle: Throttle,
+    /// 실제로 멈춰 있는지(사용자 정지 || 429 자동 정지). 대기자를 깨우는 용도.
     paused: watch::Sender<bool>,
+    pause_state: Mutex<PauseState>,
     /// f64 비트. 백오프·일시정지 시간 배율(테스트용).
     scale: AtomicU64,
 }
@@ -125,6 +136,7 @@ impl Client {
                 session: RwLock::new(Session { user_agent: USER_AGENT.to_string(), cookie: None }),
                 throttle,
                 paused,
+                pause_state: Mutex::new(PauseState::default()),
                 scale: AtomicU64::new(1f64.to_bits()),
             }),
         }
@@ -160,12 +172,23 @@ impl Client {
     }
 
     // ---- 일시정지 ----
-    pub fn pause(&self) {
-        self.inner.paused.send_replace(true);
+    fn publish(&self, st: &PauseState) {
+        self.inner.paused.send_replace(st.user || st.auto.is_some());
     }
 
+    /// 사용자 정지. 429 타이머가 풀지 못한다.
+    pub fn pause(&self) {
+        let mut st = self.inner.pause_state.lock().unwrap();
+        st.user = true;
+        self.publish(&st);
+    }
+
+    /// 사용자 재개. 진행 중인 자동 정지도 함께 푼다(해당 타이머는 세대가 달라 무효).
     pub fn resume(&self) {
-        self.inner.paused.send_replace(false);
+        let mut st = self.inner.pause_state.lock().unwrap();
+        st.user = false;
+        st.auto = None;
+        self.publish(&st);
     }
 
     pub fn is_paused(&self) -> bool {
@@ -184,24 +207,29 @@ impl Client {
         Ok(())
     }
 
-    /// 여러 워커가 동시에 429 를 맞아도 한 번만 멈추고, 5초 뒤 한 번만 푼다.
+    /// 여러 워커가 동시에 429 를 맞아도 자동 정지는 하나, 타이머도 하나.
     fn backoff_pause(&self) {
-        let started = self.inner.paused.send_if_modified(|p| {
-            if *p {
-                false
-            } else {
-                *p = true;
-                true
+        let gen = {
+            let mut st = self.inner.pause_state.lock().unwrap();
+            if st.auto.is_some() {
+                return;
+            }
+            st.next_gen += 1;
+            let gen = st.next_gen;
+            st.auto = Some(gen);
+            self.publish(&st);
+            gen
+        };
+        let this = self.clone();
+        let d = Duration::from_secs_f64(PAUSE_SECS * self.scale());
+        tokio::spawn(async move {
+            tokio::time::sleep(d).await;
+            let mut st = this.inner.pause_state.lock().unwrap();
+            if st.auto == Some(gen) {
+                st.auto = None;
+                this.publish(&st);
             }
         });
-        if started {
-            let this = self.clone();
-            let d = Duration::from_secs_f64(PAUSE_SECS * self.scale());
-            tokio::spawn(async move {
-                tokio::time::sleep(d).await;
-                this.resume();
-            });
-        }
     }
 
     // ---- 요청 ----
@@ -333,4 +361,27 @@ fn describe(e: &reqwest::Error) -> String {
         "error"
     };
     kind.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn stale_timer_does_not_shorten_new_auto_pause() {
+        let c = Client::new("https://x/", Throttle::new(Duration::ZERO, Duration::ZERO))
+            .with_backoff_scale(0.2); // 자동 정지 1 s
+        c.backoff_pause(); // 세대 1, 타이머 A: t=1.0
+        c.backoff_pause(); // 동시 429: 무시
+        assert!(c.is_paused());
+        c.resume();
+        assert!(!c.is_paused());
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        c.backoff_pause(); // 세대 2, 타이머 B: t=1.5
+        assert!(c.is_paused());
+        tokio::time::sleep(Duration::from_millis(750)).await; // t=1.25, A 는 이미 발화
+        assert!(c.is_paused(), "stale timer ended the new pause early");
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        assert!(!c.is_paused());
+    }
 }

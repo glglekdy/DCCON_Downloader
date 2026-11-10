@@ -89,18 +89,25 @@ async fn pauses_globally_on_429() {
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
-    // 5 s * 0.2 = 1 s pause: long enough to observe without racing.
-    let c = client(0.2);
+    // 5 s * 0.5 = 2.5 s pause: plenty of headroom to observe it.
+    let c = client(0.5);
     let c2 = c.clone();
     let uri = server.uri();
     let task = tokio::spawn(async move { c2.get(&uri, &CancellationToken::new()).await });
+    for _ in 0..5000 {
+        if count(&server).await >= 1 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert!(count(&server).await >= 1, "server never saw the request");
     let mut seen = false;
-    for _ in 0..200 {
+    for _ in 0..1000 {
         if c.is_paused() {
             seen = true;
             break;
         }
-        tokio::time::sleep(Duration::from_millis(2)).await;
+        tokio::time::sleep(Duration::from_millis(1)).await;
     }
     assert!(seen, "client never paused after 429");
     let resp = task.await.unwrap().unwrap();
@@ -197,4 +204,40 @@ async fn post_form_sends_body() {
         .await
         .unwrap();
     assert_eq!(resp.json().unwrap()["k"], 1);
+}
+
+#[tokio::test]
+async fn user_pause_survives_auto_resume() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(429))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    let c = client(0.1); // auto pause 0.5 s
+    let c2 = c.clone();
+    let uri = server.uri();
+    let task = tokio::spawn(async move { c2.get(&uri, &CancellationToken::new()).await });
+    let mut seen = false;
+    for _ in 0..5000 {
+        if c.is_paused() {
+            seen = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert!(seen);
+    c.pause(); // user pause on top of the auto pause
+    tokio::time::sleep(Duration::from_millis(900)).await; // well past 0.5 s
+    assert!(c.is_paused(), "auto resume cancelled the user pause");
+    assert!(!task.is_finished());
+    assert_eq!(count(&server).await, 1);
+    c.resume();
+    let resp = task.await.unwrap().unwrap();
+    assert_eq!(resp.status, 200);
+    assert!(!c.is_paused());
 }
