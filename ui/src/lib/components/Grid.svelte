@@ -1,9 +1,14 @@
 <script lang="ts">
-  import { extFromUrl, imageUrl, type Site } from '../api'
+  import { imageUrl, type Site } from '../api'
   import { settings } from '../stores/settings'
   import { selection, showView, viewState } from '../stores/view'
   import Card from './Card.svelte'
   import Thumb from './Thumb.svelte'
+
+  // 1.3.0 과 같은 캐시 파일을 쓰도록 확장자를 고정한다 (main_window.py: 목록 썸네일 png, 움짤 포스터 jpg).
+  // 실제 형식이 달라도 WebView 가 이미지 내용을 보고 디코딩한다.
+  const LIST_THUMB_EXT = 'png'
+  const POSTER_EXT = 'jpg'
 
   const animate = $derived($settings?.animate_gifs ?? true)
   const sel = $derived($selection)
@@ -26,7 +31,7 @@
         <Thumb
           src={imageUrl(item.path)}
           ext={item.ext}
-          poster={item.thumb ? { src: item.thumb, ext: extFromUrl(item.thumb) } : null}
+          poster={item.thumb ? { src: item.thumb, ext: POSTER_EXT } : null}
           gen={$viewState.gen}
           site={$viewState.site}
           {animate}
@@ -48,7 +53,7 @@
       >
         <Thumb
           src={brief.thumb_url}
-          ext={extFromUrl(brief.thumb_url)}
+          ext={LIST_THUMB_EXT}
           gen={$viewState.gen}
           site={$viewState.site}
           animate={false}
