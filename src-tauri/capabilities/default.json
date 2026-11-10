@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "기본 권한",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default", "opener:default"]
+  "permissions": ["core:default", "core:window:allow-set-theme", "dialog:default", "opener:default"]
 }
