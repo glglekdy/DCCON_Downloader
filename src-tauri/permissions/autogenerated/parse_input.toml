@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-parse-input"
+description = "Enables the parse_input command without any pre-configured scope."
+commands.allow = ["parse_input"]
+
+[[permission]]
+identifier = "deny-parse-input"
+description = "Denies the parse_input command without any pre-configured scope."
+commands.deny = ["parse_input"]

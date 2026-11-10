@@ -173,17 +173,17 @@ pub fn clear_cache(state: St<'_>) -> Result<(), CmdError> {
 }
 
 // ---------------------------------------------------------------- 아카콘 로그인
-/// 저장한 아카라이브 세션이 있나.
+/// 아카라이브 세션이 붙어 있나.
 #[tauri::command(async)]
 pub fn arca_status(state: St<'_>) -> Result<bool, CmdError> {
     Ok(login::has_session(&state))
 }
 
-/// 로그인 창을 띄우고 바로 돌아온다. 끝나면 `login-finished {ok, message}`.
+/// 로그인 창을 띄우고 바로 시도 번호를 돌려준다. 끝나면 `login-finished {id, ok, message}`.
 /// 창 만들기는 동기 커맨드에서 하면 윈도우에서 멈추므로 async 로 둔다.
 #[tauri::command]
-pub async fn arca_login(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
-    login::open(&app, state.inner().clone())
+pub async fn arca_login(app: AppHandle, state: St<'_>) -> Result<u64, CmdError> {
+    login::open(&app, state.inner().clone()).await
 }
 
 /// 열려 있는 로그인 창을 닫는다 (앱에서 취소).
@@ -193,10 +193,17 @@ pub async fn arca_login_cancel(app: AppHandle) -> Result<(), CmdError> {
     Ok(())
 }
 
-/// 세션을 지운다. 웹뷰 쿠키 읽기·지우기는 메인 스레드에서 하면 멈추므로 async 로 둔다.
+/// 세션이 만료됐을 때: 세션 파일과 클라이언트 쿠키만 버린다. 웹뷰 쿠키는 남긴다.
+#[tauri::command(async)]
+pub fn arca_forget_session(state: St<'_>) -> Result<(), CmdError> {
+    login::forget_session(&state);
+    Ok(())
+}
+
+/// 명시적 로그아웃: 세션과 웹뷰의 아카라이브 쿠키까지 지운다 (지금은 화면에 진입점이 없다).
 #[tauri::command]
 pub async fn arca_logout(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
-    login::logout(&app, &state);
+    login::logout(&app, &state).await;
     Ok(())
 }
 

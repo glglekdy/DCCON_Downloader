@@ -114,17 +114,21 @@ export const clearCache = () => invoke<void>('clear_cache')
 
 /** 로그인 창이 끝나면 오는 `login-finished` 이벤트. 시도마다 한 번. */
 export interface LoginFinished {
+  /** arcaLogin() 이 돌려준 시도 번호. */
+  id: number
   ok: boolean
   message: string
 }
 
-/** 저장한 아카라이브 세션이 있나. */
+/** 아카라이브 세션이 붙어 있나. */
 export const arcaStatus = () => invoke<boolean>('arca_status')
-/** 로그인 창을 띄우고 바로 돌아온다. 결과는 `login-finished`. */
-export const arcaLogin = () => invoke<void>('arca_login')
+/** 로그인 창을 띄우고 바로 시도 번호를 돌려준다. 결과는 같은 번호의 `login-finished`. */
+export const arcaLogin = () => invoke<number>('arca_login')
 /** 떠 있는 로그인 창을 닫는다. */
 export const arcaLoginCancel = () => invoke<void>('arca_login_cancel')
-/** 세션과 쿠키를 지운다. */
+/** 세션이 만료됐을 때: 세션 파일과 클라이언트 쿠키만 버린다 (로그인 창의 쿠키는 남긴다). */
+export const arcaForgetSession = () => invoke<void>('arca_forget_session')
+/** 명시적 로그아웃: 로그인 창의 아카라이브 쿠키까지 지운다. */
 export const arcaLogout = () => invoke<void>('arca_logout')
 
 // --- 이벤트 -------------------------------------------------------------

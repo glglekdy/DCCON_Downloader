@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-arca-status"
+description = "Enables the arca_status command without any pre-configured scope."
+commands.allow = ["arca_status"]
+
+[[permission]]
+identifier = "deny-arca-status"
+description = "Denies the arca_status command without any pre-configured scope."
+commands.deny = ["arca_status"]

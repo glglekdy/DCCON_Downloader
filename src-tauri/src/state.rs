@@ -1,7 +1,7 @@
 //! 앱 전역 상태.
 
 use std::path::PathBuf;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex, RwLock};
 
 use dccon_core::cache::{ImageCache, MetaCache};
@@ -40,6 +40,8 @@ pub struct AppState {
     pub update: Mutex<UpdateSlot>,
     /// 지난 실행에서 남은 업데이트 실패 사유. 한 번 읽으면 비운다.
     pub last_error: Mutex<Option<String>>,
+    /// 아카콘 클라이언트에 로그인 세션이 붙어 있나 (`login::has_session`).
+    pub arca_logged_in: AtomicBool,
 }
 
 fn thumb_permits(n: u32) -> usize {
@@ -62,6 +64,7 @@ impl AppState {
             queue: Queue::default(),
             update: Mutex::new(UpdateSlot::default()),
             last_error: Mutex::new(None),
+            arca_logged_in: AtomicBool::new(false),
             paths,
         }
     }

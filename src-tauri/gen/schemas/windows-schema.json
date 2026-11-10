@@ -345,6 +345,330 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the apply_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-apply-update",
+          "markdownDescription": "Enables the apply_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the arca_forget_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-arca-forget-session",
+          "markdownDescription": "Enables the arca_forget_session command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the arca_login command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-arca-login",
+          "markdownDescription": "Enables the arca_login command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the arca_login_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-arca-login-cancel",
+          "markdownDescription": "Enables the arca_login_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the arca_logout command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-arca-logout",
+          "markdownDescription": "Enables the arca_logout command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the arca_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-arca-status",
+          "markdownDescription": "Enables the arca_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the begin_view command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-begin-view",
+          "markdownDescription": "Enables the begin_view command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cache_stats command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cache-stats",
+          "markdownDescription": "Enables the cache_stats command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cancel_queue command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cancel-queue",
+          "markdownDescription": "Enables the cancel_queue command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cancel_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cancel-update",
+          "markdownDescription": "Enables the cancel_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the check_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-check-update",
+          "markdownDescription": "Enables the check_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the clear_cache command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-clear-cache",
+          "markdownDescription": "Enables the clear_cache command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the download_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-download-update",
+          "markdownDescription": "Enables the download_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the enqueue command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-enqueue",
+          "markdownDescription": "Enables the enqueue command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-settings",
+          "markdownDescription": "Enables the get_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_all command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-all",
+          "markdownDescription": "Enables the list_all command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_arca command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-arca",
+          "markdownDescription": "Enables the list_arca command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_top command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-top",
+          "markdownDescription": "Enables the list_top command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-folder",
+          "markdownDescription": "Enables the open_folder command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_package command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-package",
+          "markdownDescription": "Enables the open_package command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_release_page command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-release-page",
+          "markdownDescription": "Enables the open_release_page command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the parse_input command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-parse-input",
+          "markdownDescription": "Enables the parse_input command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the pause_queue command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pause-queue",
+          "markdownDescription": "Enables the pause_queue command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-settings",
+          "markdownDescription": "Enables the save_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the search command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-search",
+          "markdownDescription": "Enables the search command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the skip_version command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-skip-version",
+          "markdownDescription": "Enables the skip_version command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the take_last_error command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-take-last-error",
+          "markdownDescription": "Enables the take_last_error command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the apply_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-apply-update",
+          "markdownDescription": "Denies the apply_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the arca_forget_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-arca-forget-session",
+          "markdownDescription": "Denies the arca_forget_session command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the arca_login command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-arca-login",
+          "markdownDescription": "Denies the arca_login command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the arca_login_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-arca-login-cancel",
+          "markdownDescription": "Denies the arca_login_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the arca_logout command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-arca-logout",
+          "markdownDescription": "Denies the arca_logout command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the arca_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-arca-status",
+          "markdownDescription": "Denies the arca_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the begin_view command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-begin-view",
+          "markdownDescription": "Denies the begin_view command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cache_stats command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cache-stats",
+          "markdownDescription": "Denies the cache_stats command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cancel_queue command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cancel-queue",
+          "markdownDescription": "Denies the cancel_queue command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cancel_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cancel-update",
+          "markdownDescription": "Denies the cancel_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-check-update",
+          "markdownDescription": "Denies the check_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the clear_cache command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-clear-cache",
+          "markdownDescription": "Denies the clear_cache command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the download_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-download-update",
+          "markdownDescription": "Denies the download_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the enqueue command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-enqueue",
+          "markdownDescription": "Denies the enqueue command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-settings",
+          "markdownDescription": "Denies the get_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_all command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-all",
+          "markdownDescription": "Denies the list_all command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_arca command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-arca",
+          "markdownDescription": "Denies the list_arca command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_top command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-top",
+          "markdownDescription": "Denies the list_top command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-folder",
+          "markdownDescription": "Denies the open_folder command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_package command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-package",
+          "markdownDescription": "Denies the open_package command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_release_page command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-release-page",
+          "markdownDescription": "Denies the open_release_page command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the parse_input command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-parse-input",
+          "markdownDescription": "Denies the parse_input command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pause_queue command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pause-queue",
+          "markdownDescription": "Denies the pause_queue command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-settings",
+          "markdownDescription": "Denies the save_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the search command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-search",
+          "markdownDescription": "Denies the search command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the skip_version command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-skip-version",
+          "markdownDescription": "Denies the skip_version command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the take_last_error command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-take-last-error",
+          "markdownDescription": "Denies the take_last_error command without any pre-configured scope."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

@@ -2,9 +2,9 @@
   import { getVersion } from '@tauri-apps/api/app'
   import { onMount } from 'svelte'
   import {
+    arcaForgetSession,
     arcaLogin,
     arcaLoginCancel,
-    arcaLogout,
     arcaStatus,
     checkUpdate,
     enqueue,
@@ -60,6 +60,12 @@
   /** 아카콘 로그인 창 단계. null 이면 닫혀 있다. */
   let loginPhase = $state<LoginPhase | null>(null)
   let loginMessage = $state('')
+  /** 지금 기다리는 로그인 시도 번호. 다른 번호의 결과는 무시한다. */
+  let loginId: number | null = null
+  /** startLogin 을 부른 차례. 늦게 돌아온 arcaLogin() 을 가려낸다. */
+  let loginSeq = 0
+  /** arcaLogin() 이 번호를 돌려주기 전에 도착한 결과. */
+  const earlyResults = new Map<number, LoginFinished>()
 
   export function focusSearch() {
     searchBar?.focus()
@@ -119,7 +125,8 @@
       if (!needed) return
       loginNeeded.set(false)
       if (loginPhase === 'waiting') return
-      void arcaLogout()
+      // 세션 파일과 클라이언트 쿠키만 버린다. 로그인 창의 쿠키는 남겨 다시 로그인이 빨라지게 한다.
+      void arcaForgetSession()
         .catch(() => undefined)
         .finally(requireLogin)
     })
@@ -169,26 +176,45 @@
   }
 
   async function startLogin() {
+    const mine = ++loginSeq
     loginPhase = 'waiting'
+    loginId = null
+    earlyResults.clear()
+    let id: number
     try {
-      await arcaLogin()
+      id = await arcaLogin()
     } catch (e) {
-      if (loginPhase !== 'waiting') return
+      if (mine !== loginSeq || loginPhase !== 'waiting') return
       loginMessage = isCmdError(e) ? e.message : String(e)
       loginPhase = 'failed'
+      return
     }
+    // 그 사이 취소했거나 새로 시작했으면 이 시도의 결과는 받지 않는다.
+    if (mine !== loginSeq || loginPhase !== 'waiting') return
+    loginId = id
+    const early = earlyResults.get(id)
+    earlyResults.clear()
+    if (early) onLoginFinished(early)
   }
 
   /** 묻기 취소, 기다리기 취소, 실패 확인. 취소한 시도의 결과는 오더라도 무시한다. */
   function closeLogin() {
     const phase = loginPhase
     loginPhase = null
+    loginId = null
     if (phase === 'waiting') void arcaLoginCancel().catch(() => undefined)
     leaveArca()
   }
 
   function onLoginFinished(r: LoginFinished) {
     if (loginPhase !== 'waiting') return
+    if (loginId === null) {
+      // 번호를 받기 전이면 잠시 맡아 둔다.
+      earlyResults.set(r.id, r)
+      return
+    }
+    if (r.id !== loginId) return
+    loginId = null
     if (r.ok) {
       loginPhase = null
       if (r.message) showNotice(r.message, 10000)

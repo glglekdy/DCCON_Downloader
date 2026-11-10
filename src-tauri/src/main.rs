@@ -1,5 +1,9 @@
 #![cfg_attr(not(feature = "console"), windows_subsystem = "windows")]
 
+#[cfg(test)]
+mod acl_tests;
+#[cfg(test)]
+mod app_commands;
 mod commands;
 mod dto;
 mod imgproto;
@@ -54,6 +58,7 @@ fn main() {
             commands::arca_login,
             commands::arca_login_cancel,
             commands::arca_logout,
+            commands::arca_forget_session,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 실행 중 오류");

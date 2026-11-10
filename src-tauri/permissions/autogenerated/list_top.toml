@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-top"
+description = "Enables the list_top command without any pre-configured scope."
+commands.allow = ["list_top"]
+
+[[permission]]
+identifier = "deny-list-top"
+description = "Denies the list_top command without any pre-configured scope."
+commands.deny = ["list_top"]

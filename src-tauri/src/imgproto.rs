@@ -200,6 +200,15 @@ pub fn handle<R: Runtime>(
     request: Request<Vec<u8>>,
     responder: UriSchemeResponder,
 ) {
+    // 앱 화면(main)만 쓴다. 로그인 창 같은 다른 웹뷰의 요청은 받지 않는다.
+    if ctx.webview_label() != "main" {
+        let resp = Response::builder()
+            .status(403)
+            .body(Vec::new())
+            .expect("빈 403 응답");
+        responder.respond(resp);
+        return;
+    }
     let state = ctx.app_handle().state::<Arc<AppState>>().inner().clone();
     let query = request.uri().query().unwrap_or("").to_string();
     let range = request

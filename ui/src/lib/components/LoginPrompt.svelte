@@ -35,7 +35,10 @@
       <button type="button" class="primary" data-autofocus onclick={onOk}>확인</button>
     </div>
   {:else if phase === 'waiting'}
-    <p class="msg">열린 창에서 아카라이브에 로그인해 주세요…</p>
+    <p class="msg">
+      열린 창에서 아카라이브에 로그인해 주세요…{'\n'}로그인을 마쳤는데 넘어가지 않으면 로그인 창을 닫아
+      주세요.
+    </p>
     <div class="track" role="progressbar" aria-label="로그인 기다리는 중">
       <div class="chunk"></div>
     </div>
