@@ -1,0 +1,2 @@
+crates/core/tests/golden/** -text
+crates/core/tests/fixtures/** -text

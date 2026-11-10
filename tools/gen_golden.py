@@ -131,12 +131,16 @@ def settings() -> None:
     with tempfile.TemporaryDirectory() as td:
         orig = config.SETTINGS_PATH
         config.SETTINGS_PATH = Path(td) / "settings.json"
+        orig_home = Path.home
+        Path.home = classmethod(lambda cls: Path("C:/Users/golden"))
         try:
             config.Settings().save()
             data = config.SETTINGS_PATH.read_bytes()
         finally:
             config.SETTINGS_PATH = orig
-    (GOLDEN / "settings_default.json").write_bytes(data)
+            Path.home = orig_home
+    # 윈도우 텍스트 모드가 LF 를 CRLF 로 바꿔 쓴다. 플랫폼과 무관하게 LF 로 고정한다.
+    (GOLDEN / "settings_default.json").write_bytes(data.replace(bytes([13, 10]), bytes([10])))
 
 
 def network_fixtures() -> None:
@@ -189,7 +193,8 @@ def parsed() -> None:
         dest = Path(td)
         width = pad_width(max((i.sort for i in pkg.items), default=0))
         _write_meta(dest, pkg, width)
-        (GOLDEN / "meta.json").write_bytes((dest / "_meta.json").read_bytes())
+        raw = (dest / "_meta.json").read_bytes()
+        (GOLDEN / "meta.json").write_bytes(raw.replace(bytes([13, 10]), bytes([10])))
 
     top = (FIX / "dccon_top_day.txt").read_bytes()
     dump(GOLDEN / "parsed_dccon_top_day.json", {"rows": briefs(api.fetch_top(serving(top), "day"))})
