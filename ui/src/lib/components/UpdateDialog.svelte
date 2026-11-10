@@ -140,10 +140,8 @@ ${fail(e)}` : fail(e))
 <Modal title="업데이트" onClose={close} width={520}>
   {#if phase === 'confirm'}
     <h2 class="crumb">업데이트</h2>
-    <p class="msg">
-      다운로드가 진행 중입니다. 중단하고 다시 시작할까요?{'\n'}받다 만 패키지는 다음에 다시 받으면
-      빠진 것만 채워집니다.
-    </p>
+    <!-- 소스 줄바꿈이 pre-line 으로 그대로 보이지 않도록 한 문자열로 둔다. -->
+    <p class="msg">{'다운로드가 진행 중입니다. 중단하고 다시 시작할까요?\n받다 만 패키지는 다음에 다시 받으면 빠진 것만 채워집니다.'}</p>
     <div class="buttons">
       <button type="button" onclick={onClose}>아니요</button>
       <button type="button" class="primary" data-autofocus onclick={apply}>예</button>
@@ -196,10 +194,12 @@ ${fail(e)}` : fail(e))
 </Modal>
 
 <style>
+  /* update_dialog.py: 제목은 #crumb (22px), 줄 사이 14, 변경 내역은 QTextBrowser 스타일 */
   .crumb {
-    margin: 0 0 6px;
-    font-size: 16px;
+    margin: 0 0 14px;
+    font-size: 22px;
     font-weight: 600;
+    line-height: 29px;
     color: var(--heading);
   }
   .sub {
@@ -210,8 +210,9 @@ ${fail(e)}` : fail(e))
   .notes {
     height: 220px;
     overflow-y: auto;
-    padding: 10px 12px;
-    border-radius: 6px;
+    padding: 8px;
+    border: 1px solid var(--btn-border);
+    border-radius: 8px;
     background: var(--tree-bg);
     font-size: 13px;
     line-height: 1.5;

@@ -61,7 +61,13 @@
       title="검색어, 패키지 ID 또는 URL을 입력하고 Enter. Ctrl+L로 바로 이동"
     />
     {#if word}
-      <button type="button" class="clear" aria-label="지우기" onclick={() => (word = '')}>×</button>
+      <button type="button" class="clear" aria-label="지우기" onclick={() => (word = '')}>
+        <!-- QLineEdit 지우기 단추: 14px 회색 원 안의 흰 × (테마와 상관없이 같은 색) -->
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+          <circle cx="7" cy="7" r="7" fill="#4d4d4d" />
+          <path d="M4.5 4.5l5 5M9.5 4.5l-5 5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+      </button>
     {/if}
   </div>
 </form>
@@ -91,13 +97,19 @@
     right: 4px;
     top: 50%;
     transform: translateY(-50%);
+    width: 22px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
-    padding: 0 6px;
+    padding: 0;
     min-height: 0;
-    color: var(--muted);
   }
   .clear:hover {
     background: transparent;
-    color: var(--text);
+  }
+  .clear svg {
+    display: block;
   }
 </style>

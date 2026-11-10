@@ -128,7 +128,8 @@
   }
 </script>
 
-<Modal title="설정" {onClose} width={520}>
+<!-- settings_dialog.py 의 배치를 그대로 옮긴다: 여백 28/24, 줄 사이 22, 폼 줄 사이 10, 라벨 열은 가장 긴 라벨 폭. -->
+<Modal title="설정" {onClose} width={522}>
   <form
     onsubmit={(e) => {
       e.preventDefault()
@@ -137,55 +138,54 @@
   >
     <h2 class="crumb">다운로드 설정</h2>
 
-    <div class="field">
-      <label for="s-dir">저장 폴더</label>
+    <div class="form">
+      <label class="lbl tall" for="s-dir">저장 폴더</label>
       <div class="row">
         <input id="s-dir" type="text" bind:value={draft.download_dir} />
         <button type="button" onclick={pickDir}>찾아보기…</button>
       </div>
-    </div>
 
-    <div class="field">
-      <label for="s-conc">동시 다운로드</label>
+      <label class="lbl" for="s-conc">동시 다운로드</label>
       <div class="row">
-        <input id="s-conc" type="range" min="1" max="16" bind:value={draft.concurrency} />
+        <input
+          id="s-conc"
+          type="range"
+          min="1"
+          max="16"
+          bind:value={draft.concurrency}
+          style:--fill="calc(7px + (100% - 14px) * {(draft.concurrency - 1) / 15})"
+        />
         <span class="num">{draft.concurrency}</span>
       </div>
-    </div>
-    <p class="hint">3~4 권장. 높이면 빨라지지만 차단 위험이 올라갑니다.</p>
 
-    <div class="field">
-      <span class="lbl"></span>
-      <label class="check"
-        ><input type="checkbox" bind:checked={draft.save_main_image} /> 패키지 대표 이미지도 저장 (_main)</label
-      >
-    </div>
-    <div class="field">
-      <span class="lbl"></span>
-      <label class="check"
-        ><input type="checkbox" bind:checked={draft.write_meta_json} /> _meta.json 으로 제목·태그 정보 남기기</label
-      >
-    </div>
+      <span></span>
+      <p class="hint">3~4 권장. 높이면 빨라지지만 차단 위험이 올라갑니다.</p>
 
-    <div class="field">
-      <label for="s-theme">테마</label>
+      <span></span>
+      <label class="check"
+        ><input type="checkbox" bind:checked={draft.save_main_image} />패키지 대표 이미지도 저장 (_main)</label
+      >
+
+      <span></span>
+      <label class="check"
+        ><input type="checkbox" bind:checked={draft.write_meta_json} />_meta.json 으로 제목·태그 정보 남기기</label
+      >
+
+      <label class="lbl tall" for="s-theme">테마</label>
       <select id="s-theme" bind:value={draft.theme}>
         {#each THEMES as [key, label] (key)}
           <option value={key}>{label}</option>
         {/each}
       </select>
-    </div>
 
-    <div class="field">
       <span class="lbl">화면 효과</span>
       <label class="check"
-        ><input type="checkbox" bind:checked={draft.reduce_motion} /> 움직임 줄이기 (애니메이션 끄기)</label
+        ><input type="checkbox" bind:checked={draft.reduce_motion} />움직임 줄이기 (애니메이션 끄기)</label
       >
-    </div>
-    <div class="field">
-      <span class="lbl"></span>
+
+      <span></span>
       <label class="check" title="끄면 움직이는 디시콘도 첫 장면에서 멈춰 보입니다."
-        ><input type="checkbox" bind:checked={draft.animate_gifs} /> GIF 미리보기 움직이기</label
+        ><input type="checkbox" bind:checked={draft.animate_gifs} />GIF 미리보기 움직이기</label
       >
     </div>
 
@@ -199,25 +199,25 @@
       <button type="button" disabled={checking} onclick={check}>업데이트 확인</button>
     </div>
     <label class="check"
-      ><input type="checkbox" bind:checked={draft.check_updates} /> 시작할 때 새 버전 확인</label
+      ><input type="checkbox" bind:checked={draft.check_updates} />시작할 때 새 버전 확인</label
     >
 
+    <!-- QDialogButtonBox (Windows): 확인 쪽이 앞 -->
     <div class="buttons">
-      <button type="button" onclick={onClose}>취소</button>
       <button type="submit" class="primary" disabled={saving}>저장</button>
+      <button type="button" onclick={onClose}>취소</button>
     </div>
   </form>
 </Modal>
 
 {#if confirmClear}
   <Modal title="캐시 비우기" onClose={() => (confirmClear = false)} width={400}>
-    <h2 class="crumb">캐시 비우기</h2>
-    <p class="msg">
-      받아둔 미리보기 이미지를 전부 지웁니다.{'\n'}저장 폴더의 파일은 그대로 남습니다. 계속할까요?
-    </p>
+    <h2 class="title">캐시 비우기</h2>
+    <p class="msg">{'받아둔 미리보기 이미지를 전부 지웁니다.\n저장 폴더의 파일은 그대로 남습니다. 계속할까요?'}</p>
+    <!-- QMessageBox.question: 예, 아니요 -->
     <div class="buttons">
+      <button type="button" onclick={doClear}>예</button>
       <button type="button" onclick={() => (confirmClear = false)}>아니요</button>
-      <button type="button" class="primary" onclick={doClear}>예</button>
     </div>
   </Modal>
 {/if}
@@ -236,29 +236,35 @@
   form {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 22px;
   }
   .crumb {
-    margin: 0 0 12px;
-    font-size: 16px;
+    margin: 0;
+    font-size: 22px;
     font-weight: 600;
+    line-height: 29px;
     color: var(--heading);
   }
-  .field {
+  .form {
     display: grid;
-    grid-template-columns: 92px 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 10px;
   }
-  .lbl,
-  .field > label:first-child {
-    color: var(--muted);
-    font-size: 12px;
+  .lbl {
+    color: var(--text);
+    line-height: 17px;
+    white-space: nowrap;
+  }
+  /* 입력칸 줄의 라벨은 위쪽에 붙는다 (QFormLayout). */
+  .lbl.tall {
+    align-self: start;
+    padding-top: 6px;
   }
   .row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
   .row input[type='text'] {
     flex: 1;
@@ -266,41 +272,50 @@
   }
   .row input[type='range'] {
     flex: 1;
-    accent-color: var(--accent);
+    min-width: 0;
   }
   .num {
     width: 24px;
-    text-align: right;
+    line-height: 17px;
   }
   .hint {
-    margin: -4px 0 0 102px;
+    margin: 0;
     color: var(--muted);
     font-size: 12px;
+    line-height: 16px;
   }
   .check {
     display: flex;
     align-items: center;
     gap: 8px;
+    justify-self: start;
+    align-self: flex-start;
+    line-height: 18px;
   }
   .line {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 12px;
+    gap: 10px;
   }
   .grow {
     flex: 1;
     min-width: 0;
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .buttons {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    margin-top: 16px;
+    gap: 6px;
+  }
+  .title {
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--heading);
   }
   .msg {
-    margin: 0;
+    margin: 0 0 16px;
     white-space: pre-line;
   }
 </style>

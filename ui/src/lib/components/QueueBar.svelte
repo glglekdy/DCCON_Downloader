@@ -50,7 +50,7 @@
   <div class="detail" class:open={expanded}>
     <div class="detail-inner">
       <div class="table" role="table" aria-label="패키지별 진행 내역">
-        <div class="tr head" role="row">
+        <div class="tr thead" role="row">
           <span role="columnheader">패키지</span><span role="columnheader">상태</span>
         </div>
         {#each rows as j}
@@ -117,26 +117,32 @@
     min-height: 0;
     overflow: hidden;
   }
+  /* QTreeWidget#queueDetail: 펼치면 늘 170px, 첫 열 300px, 줄 바꿈 색 없음.
+     머리글은 12px (QHeaderView::section padding 6px 8px), 항목은 13px (QTreeWidget::item padding 6px). */
   .table {
-    max-height: 170px;
+    height: 170px;
     overflow-y: auto;
     background: var(--tree-bg);
-    font-size: 12px;
+    font-size: 13px;
   }
   .tr {
     display: grid;
-    grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
-    gap: 8px;
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+  .tr > span {
     padding: 6px 8px;
+    line-height: 17px;
   }
-  .tr:nth-child(even) {
-    background: var(--tree-alt);
-  }
-  .tr.head {
+  .tr.thead {
     position: sticky;
     top: 0;
     background: var(--header-bg);
     color: var(--header-fg);
+    font-size: 12px;
+  }
+  /* 머리글 칸 높이 33 (1.3.0 실측) */
+  .tr.thead > span {
+    line-height: 21px;
   }
   .title,
   .state {
@@ -144,8 +150,9 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* "2/11  01_11.gif", "저장 25  건너뜀 3" 의 두 칸 띄움을 살린다. */
   .state {
-    color: var(--muted);
+    white-space: pre;
   }
   .row {
     display: flex;

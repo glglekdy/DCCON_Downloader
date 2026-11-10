@@ -20,8 +20,8 @@
     if (!jobs.length || busy) return
     busy = true
     try {
+      // 1.3.0 처럼 받기 시작해도 선택은 그대로 둔다.
       await enqueue(s.site, jobs)
-      selection.clear()
     } catch (e) {
       showNotice(isCmdError(e) ? e.message : String(e))
     } finally {

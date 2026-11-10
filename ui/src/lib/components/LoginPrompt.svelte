@@ -20,25 +20,29 @@
     /** ask·waiting 에서 취소, failed 에서 확인, Esc. */
     onCancel: () => void
   } = $props()
+
+  const ASK =
+    '아카콘을 보려면 아카라이브 로그인이 필요합니다.\n\n' +
+    '확인을 누르면 로그인 창이 열립니다.\n' +
+    '로그인을 마치면 아카콘 화면으로 넘어갑니다.'
+  const WAITING =
+    '열린 창에서 아카라이브에 로그인해 주세요…\n' +
+    '로그인을 마쳤는데 넘어가지 않으면 로그인 창을 닫아 주세요.'
 </script>
 
 <!-- main_window._require_login 의 알림창·진행창·경고창 -->
 <Modal title="아카콘 로그인" onClose={onCancel} width={440}>
   <h2 class="crumb">아카콘 로그인</h2>
   {#if phase === 'ask'}
-    <p class="msg">
-      아카콘을 보려면 아카라이브 로그인이 필요합니다.{'\n\n'}확인을 누르면 로그인 창이 열립니다.{'\n'}로그인을
-      마치면 아카콘 화면으로 넘어갑니다.
-    </p>
+    <!-- 소스 줄바꿈이 pre-line 으로 그대로 보이지 않도록 문구는 한 문자열로 둔다. -->
+    <p class="msg">{ASK}</p>
+    <!-- QMessageBox: 확인, 취소 -->
     <div class="buttons">
+      <button type="button" data-autofocus onclick={onOk}>확인</button>
       <button type="button" onclick={onCancel}>취소</button>
-      <button type="button" class="primary" data-autofocus onclick={onOk}>확인</button>
     </div>
   {:else if phase === 'waiting'}
-    <p class="msg">
-      열린 창에서 아카라이브에 로그인해 주세요…{'\n'}로그인을 마쳤는데 넘어가지 않으면 로그인 창을 닫아
-      주세요.
-    </p>
+    <p class="msg">{WAITING}</p>
     <div class="track" role="progressbar" aria-label="로그인 기다리는 중">
       <div class="chunk"></div>
     </div>

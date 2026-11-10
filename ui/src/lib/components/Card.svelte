@@ -98,12 +98,13 @@
   .selected .ring {
     opacity: 1;
   }
+  /* 1.3.0 에서 실측한 자리와 크기: 카드 기준 (12, 18), 16px + 테두리 1px. */
   .check {
     position: absolute;
     left: 12px;
-    top: 12px;
-    width: 16px;
-    height: 16px;
+    top: 18px;
+    width: 18px;
+    height: 18px;
     box-sizing: border-box;
     border-radius: 4px;
     background: var(--check-bg);
@@ -118,7 +119,7 @@
     border-color: var(--focus);
   }
   .check.on {
-    background: var(--accent) var(--check-icon) center / 14px 14px no-repeat;
+    background: var(--accent) var(--check-icon) center / 16px 16px no-repeat;
     border-color: var(--accent);
   }
   .label,

@@ -95,7 +95,8 @@
     padding: 24px 28px;
     border: 1px solid var(--dock-border);
     border-radius: 12px;
-    background: var(--surface);
+    /* QDialog { background: $bg } */
+    background: var(--bg);
     color: var(--text);
     box-shadow: 0 8px 28px color-mix(in srgb, var(--dock-shadow) 28%, transparent);
     outline: none;

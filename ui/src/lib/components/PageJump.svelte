@@ -50,8 +50,9 @@
       <input bind:this={input} type="number" min="1" max={pages} bind:value />
     </label>
     <div class="buttons">
+      <!-- QInputDialog: 확인, 취소 -->
+      <button type="submit">확인</button>
       <button type="button" onclick={onClose}>취소</button>
-      <button type="submit" class="primary">확인</button>
     </div>
   </form>
   </div>
@@ -74,7 +75,7 @@
     min-width: 280px;
     padding: 18px 20px;
     border-radius: 10px;
-    background: var(--popup-bg);
+    background: var(--bg);
     border: 1px solid var(--topbar-border);
     color: var(--text);
     user-select: text;
@@ -93,7 +94,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    color: var(--muted);
+    color: var(--text);
   }
   .buttons {
     display: flex;

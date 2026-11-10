@@ -102,7 +102,8 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 16px 12px;
+    /* QFrame 의 스타일시트 테두리는 레이아웃 여백을 줄이지 않는다: 안쪽 폭 186 (1.3.0) */
+    padding: 16px 11px 16px 12px;
     background: var(--surface);
     border-right: 1px solid var(--topbar-border);
   }

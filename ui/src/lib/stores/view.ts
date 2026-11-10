@@ -155,7 +155,9 @@ export async function showView(
   settled = false
   const site = viewSite(v)
   currentSite.set(site)
-  activeTab.set(tabOf(v))
+  // 검색·패키지 화면에서는 1.3.0 처럼 마지막 목록 메뉴를 선택된 채로 둔다.
+  const tab = tabOf(v)
+  if (tab !== null) activeTab.set(tab)
   loading.set(true)
   selection.clear()
   // 쪽 번호 줄은 쪽을 넘길 때마다 사라졌다 나타나지 않도록 로딩 중에도 둔다 (Heading 이 비활성으로 보인다).
@@ -213,7 +215,7 @@ export async function showView(
         pages: Math.max(res.pages, res.page),
         resultText:
           v.kind === 'all' && res.total
-            ? `총 ${res.total.toLocaleString('en-US')}개`
+            ? `전체 ${res.total.toLocaleString('en-US')}개 패키지`
             : res.items.length
               ? `${res.items.length}개 패키지`
               : '',
