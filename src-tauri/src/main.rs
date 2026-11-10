@@ -2,6 +2,7 @@
 
 mod commands;
 mod dto;
+mod imgproto;
 mod queue;
 mod state;
 
@@ -15,6 +16,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(state)
+        .register_asynchronous_uri_scheme_protocol("img", imgproto::handle)
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::save_settings,
