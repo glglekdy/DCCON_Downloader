@@ -1,62 +1,104 @@
-# 디시콘 다운로더 빌드 스크립트
+﻿# 디시콘 다운로더 빌드 스크립트 (Windows)
 #
-#   ./build.ps1              onedir  -> dist/dccon-downloader/  (권장, 시작 빠름)
-#   ./build.ps1 -OneFile     단일 exe -> dist/dccon-downloader.exe
-#   ./build.ps1 -Console     콘솔 창을 띄워 오류 메시지를 볼 수 있게 (디버깅용)
-#   ./build.ps1 -Clean       이전 빌드 산출물 먼저 정리
+#   ./build.ps1             -> dist/dccon-downloader.exe
+#   ./build.ps1 -Clean      이전 빌드 산출물(dist/, ui/dist/) 먼저 정리
+#   ./build.ps1 -Console    콘솔 창이 붙은 빌드 (오류 메시지 확인용)
+#   ./build.ps1 -Release    dist/release/ 에 릴리즈 자산 둘을 만든다
+#                           (dccon-downloader-<버전>.exe, dccon-downloader-<버전>-win64.zip)
 #
-# PySide6-addons 가 QtWebEngine, Qt3D, QtCharts 등을 통째로 끌고 오는데
-# 이 앱은 하나도 안 쓴다. 빼면 결과물이 수백 MB 줄어든다.
+# cargo/npm 은 진행 메시지를 stderr 로 찍는다. 그래서 ErrorActionPreference 에 기대지 않고
+# 네이티브 명령마다 $LASTEXITCODE 를 직접 확인한다. 호출할 때 2>&1 을 붙이지 말 것.
 
 param(
-    [switch]$OneFile,
+    [switch]$Clean,
     [switch]$Console,
-    [switch]$Clean
+    [switch]$Release
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 Set-Location $PSScriptRoot
 
+function Step([string]$msg) { Write-Host $msg -ForegroundColor Cyan }
+function Check([string]$what) {
+    if ($LASTEXITCODE -ne 0) { throw "$what 실패 (exit $LASTEXITCODE)" }
+}
+
+# 마이그레이션 zip 에 넣는 표식. 새 앱이 처음 뜰 때 이 파일 하나뿐인 _internal 을 지운다.
+$MigratedText = "이전 버전에서 넘어올 때 쓰는 빈 폴더입니다. 지워도 됩니다."
+
 if ($Clean) {
-    Write-Host "이전 빌드 정리..." -ForegroundColor Cyan
-    foreach ($d in @("build", "dist")) {
+    Step "이전 빌드 정리..."
+    foreach ($d in @("dist", "ui/dist")) {
         if (Test-Path $d) { Remove-Item -Recurse -Force $d }
     }
-    # dccon-downloader.spec 는 지우지 않는다. 생성물이 아니라 소스다.
 }
 
-# 아이콘이 없으면 만들어 둔다.
-if (-not (Test-Path "assets/icon.ico")) {
-    Write-Host "아이콘 생성..." -ForegroundColor Cyan
-    uv run python tools/make_icon.py
+$meta = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+Check "cargo metadata"
+$pkg = $meta.packages | Where-Object { $_.name -eq "dccon-downloader" } | Select-Object -First 1
+if (-not $pkg) { throw "cargo metadata 에 dccon-downloader 패키지가 없습니다" }
+$version = $pkg.version
+$targetDir = $meta.target_directory
+
+Step "프론트엔드 의존성 설치..."
+npm --prefix ui ci
+Check "npm ci"
+
+$tauriArgs = @("tauri", "build", "--no-bundle")
+if ($Console) { $tauriArgs += @("--", "--features", "console") }
+Step ("앱 빌드 (v{0}{1})..." -f $version, $(if ($Console) { ", console" } else { "" }))
+cargo @tauriArgs
+Check "cargo tauri build"
+
+$built = Join-Path $targetDir "release/dccon-downloader.exe"
+if (-not (Test-Path $built)) { throw "빌드 산출물이 없습니다: $built" }
+
+New-Item -ItemType Directory -Force dist | Out-Null
+Copy-Item -Force $built "dist/dccon-downloader.exe"
+$result = "dist/dccon-downloader.exe"
+
+if ($Release) {
+    Step "릴리즈 자산 만들기..."
+    $rel = "dist/release"
+    if (Test-Path $rel) { Remove-Item -Recurse -Force $rel }
+    New-Item -ItemType Directory -Force $rel | Out-Null
+
+    $exeAsset = "$rel/dccon-downloader-$version.exe"
+    Copy-Item -Force $built $exeAsset
+
+    # 옛 파이썬 앱(onedir)이 받는 이전용 zip. 구조가 배포된 앱과의 약속이다.
+    #   dccon-downloader/dccon-downloader.exe
+    #   dccon-downloader/_internal/MIGRATED.txt
+    # Compress-Archive 는 PowerShell 5.1 에서 항목 이름에 역슬래시를 쓸 수 있어 .NET 으로 직접 만든다.
+    Add-Type -AssemblyName System.IO.Compression
+    $zipPath = Join-Path (Resolve-Path $rel).Path "dccon-downloader-$version-win64.zip"
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $fs = [System.IO.File]::Open($zipPath, [System.IO.FileMode]::Create)
+    try {
+        $zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+            $e = $zip.CreateEntry("dccon-downloader/dccon-downloader.exe", [System.IO.Compression.CompressionLevel]::Optimal)
+            $es = $e.Open()
+            try {
+                $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $built).Path)
+                $es.Write($bytes, 0, $bytes.Length)
+            } finally { $es.Dispose() }
+
+            $e = $zip.CreateEntry("dccon-downloader/_internal/MIGRATED.txt", [System.IO.Compression.CompressionLevel]::Optimal)
+            $es = $e.Open()
+            try {
+                $bytes = $utf8.GetBytes($MigratedText)
+                $es.Write($bytes, 0, $bytes.Length)
+            } finally { $es.Dispose() }
+        } finally { $zip.Dispose() }
+    } finally { $fs.Dispose() }
+
+    foreach ($f in Get-ChildItem $rel) {
+        Write-Host ("  {0}  ({1:N2} MB)" -f $f.Name, ($f.Length / 1MB))
+    }
+    $result = $exeAsset
 }
-
-Write-Host "빌드 도구 준비..." -ForegroundColor Cyan
-uv sync --group build
-if ($LASTEXITCODE -ne 0) { throw "uv sync 실패" }
-
-# 제외 목록과 DLL 필터는 dccon-downloader.spec 안에 있다.
-# 스펙 파일을 쓰면 명령줄 옵션은 대부분 무시되므로 환경변수로 넘긴다.
-$env:DCCON_ONEFILE = if ($OneFile) { "1" } else { "0" }
-$env:DCCON_CONSOLE = if ($Console)  { "1" } else { "0" }
-
-# 주의: $args 는 PowerShell 자동 변수라 여기에 대입하면 안 된다.
-$pyiArgs = @("--noconfirm", "--clean", "dccon-downloader.spec")
-
-$mode = if ($OneFile) { "onefile" } else { "onedir" }
-Write-Host "PyInstaller 실행 ($mode)..." -ForegroundColor Cyan
-uv run --group build pyinstaller @pyiArgs
-if ($LASTEXITCODE -ne 0) { throw "빌드 실패 (exit $LASTEXITCODE)" }
 
 Write-Host ""
-if ($OneFile) {
-    $exe = "dist/dccon-downloader.exe"
-    $mb = (Get-Item $exe).Length / 1MB
-    Write-Host ("완료: {0}  ({1:N0} MB)" -f $exe, $mb) -ForegroundColor Green
-    Write-Host "실행할 때마다 임시 폴더에 풀리느라 onedir 보다 0.5~1초쯤 늦게 뜹니다."
-} else {
-    $dir = "dist/dccon-downloader"
-    $mb = (Get-ChildItem -Recurse $dir | Measure-Object -Sum Length).Sum / 1MB
-    Write-Host ("완료: {0}/dccon-downloader.exe  (폴더 {1:N0} MB)" -f $dir, $mb) -ForegroundColor Green
-    Write-Host "이 폴더째 zip 으로 배포하세요."
-}
+$mb = (Get-Item $result).Length / 1MB
+Write-Host ("완료: {0}  ({1:N1} MB)" -f $result, $mb) -ForegroundColor Green

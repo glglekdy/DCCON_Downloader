@@ -1,0 +1,34 @@
+name: macOS 빌드
+
+# 수동 실행. macOS 러너에서 .app 을 만들어 zip 을 아티팩트로 올린다.
+# 릴리즈할 때는 이 아티팩트를 받아 dccon-downloader-X.Y.Z-macos.zip 자산으로 올린다.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: tauri-cli 설치
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: 프론트엔드 의존성
+        run: npm --prefix ui ci
+
+      - name: 빌드
+        run: ./build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dccon-downloader-macos
+          path: dist/dccon-downloader-*-macos.zip
+          if-no-files-found: error
