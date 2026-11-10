@@ -4,6 +4,7 @@ pub mod arca;
 pub mod cache;
 pub mod config;
 pub mod dccon;
+pub mod downloader;
 pub mod error;
 pub mod http;
 pub mod models;
