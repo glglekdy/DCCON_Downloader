@@ -158,15 +158,18 @@ export async function showView(
   activeTab.set(tabOf(v))
   loading.set(true)
   selection.clear()
+  // 쪽 번호 줄은 쪽을 넘길 때마다 사라졌다 나타나지 않도록 로딩 중에도 둔다 (Heading 이 비활성으로 보인다).
+  const prev = get(viewState)
+  const pagedKind = 'page' in v
   viewState.set({
     ...EMPTY,
     view: v,
     site,
     crumb: crumbOf(v),
     hint: v.kind === 'package' ? PACKAGE_HINT : '',
-    paged: false,
-    page: 'page' in v ? v.page : 1,
-    pages: 'page' in v ? v.page : 1,
+    paged: pagedKind,
+    page: pagedKind ? v.page : 1,
+    pages: pagedKind ? (prev.paged ? Math.max(prev.pages, v.page) : v.page) : 1,
   })
   scroller.set(0)
 
@@ -226,10 +229,10 @@ export async function showView(
     if (isCmdError(e) && e.kind === 'cancelled') return
     if (isCmdError(e) && e.kind === 'login_required') {
       loginNeeded.set(true)
-      viewState.update((s) => ({ ...s, notice: '아카라이브 로그인이 만료되었습니다.' }))
+      viewState.update((s) => ({ ...s, paged: false, notice: '아카라이브 로그인이 만료되었습니다.' }))
     } else {
       const message = isCmdError(e) ? e.message : String(e)
-      viewState.update((s) => ({ ...s, notice: `불러오지 못했습니다.\n${message}` }))
+      viewState.update((s) => ({ ...s, paged: false, notice: `불러오지 못했습니다.\n${message}` }))
     }
   } finally {
     if (mine === seq) loading.set(false)

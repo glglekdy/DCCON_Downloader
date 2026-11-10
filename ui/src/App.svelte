@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { enqueue, isCmdError, openFolder, parseInput, type Site } from './lib/api'
+  import Dock from './lib/components/Dock.svelte'
+  import Glow from './lib/components/Glow.svelte'
   import Grid from './lib/components/Grid.svelte'
   import Heading from './lib/components/Heading.svelte'
   import LoadingLine from './lib/components/LoadingLine.svelte'
@@ -8,6 +10,8 @@
   import Sidebar from './lib/components/Sidebar.svelte'
   import { activeTab, currentSite, loading } from './lib/stores/nav'
   import { dismissNotice, notice, showNotice } from './lib/stores/notice'
+  import { queue } from './lib/stores/queue'
+  import { wireQueueEvents } from './lib/stores/queue-events'
   import { loadSettings } from './lib/stores/settings'
   import {
     goBack,
@@ -29,6 +33,8 @@
   const FIRST_TAB: Record<Site, string> = { dccon: 'day', arca: 'new' }
 
   let content: HTMLDivElement | undefined = $state()
+  /** 독이 지금 차지하는 높이. 그리드 아래에 이만큼 비워 둔다. */
+  let dockPad = $state(0)
   let searchBar: ReturnType<typeof SearchBar> | undefined = $state()
 
   /** 이후 단축키(Task 18)가 쓴다. */
@@ -52,6 +58,7 @@
       }
       await navigate('dccon', 'day')
     })()
+    return wireQueueEvents(queue)
   })
 
   function navigate(site: Site, tab: string) {
@@ -124,17 +131,22 @@
     <SearchBar bind:this={searchBar} site={$currentSite} onSubmit={submit} />
     <LoadingLine active={$loading} />
     <Heading />
-    {#if $notice}
-      <div class="toast" role="status">
-        <span>{$notice}</span>
-        <button type="button" class="close" aria-label="닫기" onclick={dismissNotice}>×</button>
+    <div class="stage">
+      <div class="content" bind:this={content}>
+        {#if $viewState.notice}
+          <p class="notice">{$viewState.notice}</p>
+        {:else}
+          <Grid />
+        {/if}
+        <div class="dock-pad" style:height="{dockPad}px"></div>
       </div>
-    {/if}
-    <div class="content" bind:this={content}>
-      {#if $viewState.notice}
-        <p class="notice">{$viewState.notice}</p>
-      {:else}
-        <Grid />
+      <Glow active={$queue.running && !$queue.cancelling} />
+      <Dock bind:pad={dockPad} />
+      {#if $notice}
+        <div class="toast" role="status">
+          <span>{$notice}</span>
+          <button type="button" class="close" aria-label="닫기" onclick={dismissNotice}>×</button>
+        </div>
       {/if}
     </div>
   </main>
@@ -152,17 +164,30 @@
     flex-direction: column;
     background: var(--bg);
   }
-  .content {
+  .stage {
+    position: relative;
     flex: 1;
     min-height: 0;
+  }
+  .content {
+    height: 100%;
     overflow-y: auto;
   }
+  .dock-pad {
+    transition: height 260ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+  /* 알림은 그리드를 밀지 않고 위에 얹는다. */
   .toast {
+    position: absolute;
+    top: 0;
+    left: 28px;
+    right: 28px;
+    z-index: 3;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--dock-shadow) 18%, transparent);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin: 0 28px 6px;
     padding: 6px 10px;
     border-radius: 6px;
     background: var(--sel-label-bg);

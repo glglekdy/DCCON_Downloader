@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { loading } from '../stores/nav'
   import { goPage, stepPage, viewState } from '../stores/view'
   import PageJump from './PageJump.svelte'
 
@@ -19,13 +20,14 @@
         class="ghost step"
         title="이전 페이지"
         aria-label="이전 페이지"
-        disabled={s.page <= 1}
+        disabled={$loading || s.page <= 1}
         onclick={() => stepPage(-1)}>‹</button
       >
       <button
         type="button"
         class="ghost"
         title="눌러서 원하는 페이지로 이동"
+        disabled={$loading}
         onclick={() => s.pages > 1 && (jumping = true)}>{s.page} / {s.pages}</button
       >
       <button
@@ -33,7 +35,7 @@
         class="ghost step"
         title="다음 페이지"
         aria-label="다음 페이지"
-        disabled={s.page >= s.pages}
+        disabled={$loading || s.page >= s.pages}
         onclick={() => stepPage(1)}>›</button
       >
     {/if}
