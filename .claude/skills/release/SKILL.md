@@ -21,8 +21,8 @@ description: 디시콘 다운로더 새 버전을 빌드·검증해서 GitHub �
 
 ```bash
 sed -i '/^\[workspace.package\]/,/^version = /s/^version = ".*"/version = "X.Y.Z"/' Cargo.toml
-cargo metadata --no-deps --format-version 1 >/dev/null   # Cargo.lock 의 크레이트 버전도 갱신
-git diff --stat   # Cargo.toml, Cargo.lock 만 바뀌었는지 확인
+# Cargo.lock 의 크레이트 버전은 2단계 빌드(cargo build)에서 함께 바뀐다.
+git diff --stat   # 지금은 Cargo.toml 만 바뀌어야 한다
 ```
 
 ## 2. 커밋 전 검증
