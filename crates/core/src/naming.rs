@@ -11,7 +11,7 @@ const RESERVED: &[&str] = &[
 
 fn forbidden() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| Regex::new(r#"[<>:"/\|?*\x00-\x1f]"#).unwrap())
+    R.get_or_init(|| Regex::new(r#"[<>:"/\\|?*\x00-\x1f]"#).unwrap())
 }
 
 fn spaces() -> &'static Regex {

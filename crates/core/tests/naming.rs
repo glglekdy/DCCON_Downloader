@@ -14,9 +14,12 @@ fn naming_matches_python() {
     assert!(!arr.is_empty());
     for e in arr {
         let name = e["name"].as_str().unwrap();
-        assert_eq!(sanitize(name, "untitled"), e["sanitize"].as_str().unwrap(), "sanitize {name:?}");
+        // Intentional deviation from Python 1.3.0: its regex has `\|` (a literal pipe), so a
+        // backslash survived. Rust replaces it with `_`; golden values are adjusted to match.
+        let fix = |s: &str| s.replace('\\', "_");
+        assert_eq!(sanitize(name, "untitled"), fix(e["sanitize"].as_str().unwrap()), "sanitize {name:?}");
         let idx = e["dirname_idx"].as_u64().unwrap();
-        assert_eq!(package_dirname(idx, name), e["dirname"].as_str().unwrap(), "dirname {name:?}");
+        assert_eq!(package_dirname(idx, name), fix(e["dirname"].as_str().unwrap()), "dirname {name:?}");
         let it = &e["item"];
         let f = item_filename(
             it["sort"].as_u64().unwrap() as u32,
@@ -24,7 +27,7 @@ fn naming_matches_python() {
             it["ext"].as_str().unwrap(),
             it["width"].as_u64().unwrap() as usize,
         );
-        assert_eq!(f, it["file"].as_str().unwrap(), "file {name:?}");
+        assert_eq!(f, fix(it["file"].as_str().unwrap()), "file {name:?}");
     }
 }
 
@@ -48,4 +51,10 @@ fn package_from_api_fixture() {
 fn image_url_passthrough() {
     assert_eq!(image_url("https://a/b.png"), "https://a/b.png");
     assert_eq!(image_url("abc"), format!("{IMAGE_BASE}abc"));
+}
+
+#[test]
+fn backslash_never_survives() {
+    assert!(!sanitize("..\..\evil", "x").contains('\'));
+    assert_eq!(item_filename(1, "a\b", "png", 2), "01_a_b.png");
 }

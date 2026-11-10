@@ -137,6 +137,8 @@ impl Package {
 pub struct Brief {
     pub idx: u64,
     pub title: String,
+    #[serde(default)]
     pub seller: String,
+    #[serde(default)]
     pub thumb_url: String,
 }
