@@ -12,3 +12,6 @@ downloaded/
 
 
 example.py
+/target
+ui/node_modules
+ui/dist

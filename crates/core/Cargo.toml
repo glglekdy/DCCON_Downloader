@@ -1,0 +1,6 @@
+[package]
+name = "dccon-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
