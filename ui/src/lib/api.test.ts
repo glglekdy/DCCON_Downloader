@@ -22,3 +22,14 @@ describe('imgUrl', () => {
     )
   })
 })
+
+describe('ext 보호', () => {
+  it('extFromUrl', async () => {
+    const { extFromUrl, safeExt } = await import('./api')
+    expect(extFromUrl('https://a/b/c.PNG?x=1')).toBe('PNG')
+    expect(extFromUrl('https://a/b/c')).toBe('img')
+    expect(extFromUrl('https://a/b/c.toolong')).toBe('img')
+    expect(safeExt('gi/f')).toBe('img')
+    expect(safeExt('gif')).toBe('gif')
+  })
+})

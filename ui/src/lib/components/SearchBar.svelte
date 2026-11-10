@@ -3,8 +3,16 @@
 
   let {
     site,
-    onSearch = () => {},
-  }: { site: Site; onSearch?: (word: string, searchType: string) => void } = $props()
+    onSubmit = () => {},
+  }: { site: Site; onSubmit?: (text: string, searchType: string) => void } = $props()
+
+  let input: HTMLInputElement | undefined = $state()
+
+  /** 바로가기(Ctrl+L)가 입력창으로 옮겨올 때 쓴다. */
+  export function focus() {
+    input?.focus()
+    input?.select()
+  }
 
   const TYPES: Record<Site, [string, string][]> = {
     dccon: [
@@ -31,7 +39,7 @@
 
   function submit(e: Event) {
     e.preventDefault()
-    onSearch(word, searchType)
+    onSubmit(word, searchType)
   }
 </script>
 
@@ -45,8 +53,11 @@
     <input
       type="text"
       bind:value={word}
-      placeholder="검색어, 패키지 ID 또는 디시콘 URL"
-      aria-label="디시콘 검색"
+      bind:this={input}
+      placeholder={site === 'arca'
+        ? '검색어, 아카콘 번호 또는 arca.live/e/ 주소'
+        : '검색어, 패키지 ID 또는 디시콘 URL'}
+      aria-label="검색"
       title="검색어, 패키지 ID 또는 URL을 입력하고 Enter. Ctrl+L로 바로 이동"
     />
     {#if word}

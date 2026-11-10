@@ -25,11 +25,19 @@ export async function loadSettings(): Promise<Settings> {
   return s
 }
 
-export async function updateSettings(patch: Partial<Settings>): Promise<Settings> {
-  const current = get(settings) ?? (await getSettings())
-  const next = { ...current, ...patch }
-  await saveSettings(next)
-  settings.set(next)
-  await apply(next)
-  return next
+// 읽고-바꾸고-저장이 겹치면 한쪽 변경이 사라진다. 줄을 세워 하나씩 처리한다.
+let queue: Promise<unknown> = Promise.resolve()
+
+export function updateSettings(patch: Partial<Settings>): Promise<Settings> {
+  const run = async (): Promise<Settings> => {
+    const current = get(settings) ?? (await getSettings())
+    const next = { ...current, ...patch }
+    await saveSettings(next)
+    settings.set(next)
+    await apply(next)
+    return next
+  }
+  const result = queue.then(run, run)
+  queue = result.catch(() => undefined)
+  return result
 }

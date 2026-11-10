@@ -119,6 +119,24 @@ export function onEvent<T>(name: string, cb: (payload: T) => void): Promise<Unli
 
 /** 이미지 프로토콜 주소. 윈도우의 WebView2 는 사용자 프로토콜을 `http://img.localhost/` 로 부른다. */
 export function imgUrl(url: string, ext: string, gen: number, site: Site): string {
+  ext = safeExt(ext)
   const base = /Windows/i.test(navigator.userAgent) ? 'http://img.localhost/' : 'img://localhost/'
   return `${base}?u=${encodeURIComponent(url)}&e=${encodeURIComponent(ext)}&g=${gen}&s=${site}`
+}
+
+/** 백엔드는 확장자를 ^[A-Za-z0-9]{1,5}$ 로만 받는다. 아니면 "img". */
+export function safeExt(ext: string): string {
+  return /^[A-Za-z0-9]{1,5}$/.test(ext) ? ext : 'img'
+}
+
+/** 주소 경로 끝의 확장자(1~5자 영숫자). 없으면 "img". */
+export function extFromUrl(url: string): string {
+  let path = url
+  try {
+    path = new URL(url, 'http://x/').pathname
+  } catch {
+    // 주소가 아니면 문자열 그대로 본다.
+  }
+  const m = /\.([A-Za-z0-9]{1,5})$/.exec(path)
+  return m ? m[1] : 'img'
 }
