@@ -1,0 +1,29 @@
+{
+  "idx": 48750,
+  "title": "움짤콘",
+  "description": "",
+  "seller": "작가2",
+  "price": "0",
+  "reg_date": "",
+  "main_img_path": "https://ac.arca.live/a/icon.png?expires=1&key=k",
+  "list_img_path": "",
+  "items": [
+    {
+      "idx": 11,
+      "title": "",
+      "sort": 1,
+      "ext": "png",
+      "path": "https://ac.arca.live/a/1.png?expires=1&key=k",
+      "thumb": ""
+    },
+    {
+      "idx": 22,
+      "title": "",
+      "sort": 2,
+      "ext": "mp4",
+      "path": "https://ac.arca.live/a/2.mp4?expires=1&key=k",
+      "thumb": "https://ac.arca.live/a/2.thumbnail.jpg?expires=1&key=k"
+    }
+  ],
+  "tags": []
+}

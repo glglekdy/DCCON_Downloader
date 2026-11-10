@@ -1,0 +1,113 @@
+[
+  [
+    "멍뭉",
+    {
+      "kind": "search",
+      "value": "멍뭉"
+    }
+  ],
+  [
+    "12345",
+    {
+      "kind": "ids",
+      "value": [
+        12345
+      ]
+    }
+  ],
+  [
+    "12345 83649, 94849",
+    {
+      "kind": "ids",
+      "value": [
+        12345,
+        83649,
+        94849
+      ]
+    }
+  ],
+  [
+    "12345 12345",
+    {
+      "kind": "ids",
+      "value": [
+        12345
+      ]
+    }
+  ],
+  [
+    "https://dccon.dcinside.com/hot/1#12345",
+    {
+      "kind": "ids",
+      "value": [
+        12345
+      ]
+    }
+  ],
+  [
+    "#777",
+    {
+      "kind": "ids",
+      "value": [
+        777
+      ]
+    }
+  ],
+  [
+    "https://example.com/#5",
+    {
+      "kind": "search",
+      "value": "https://example.com/#5"
+    }
+  ],
+  [
+    "12 멍",
+    {
+      "kind": "search",
+      "value": "12 멍"
+    }
+  ],
+  [
+    "",
+    {
+      "kind": "search",
+      "value": ""
+    }
+  ],
+  [
+    "   ",
+    {
+      "kind": "search",
+      "value": ""
+    }
+  ],
+  [
+    "https://dccon.dcinside.com/?package_idx=555",
+    {
+      "kind": "ids",
+      "value": [
+        555
+      ]
+    }
+  ],
+  [
+    "12345\n67890",
+    {
+      "kind": "ids",
+      "value": [
+        12345,
+        67890
+      ]
+    }
+  ],
+  [
+    "#12 #34",
+    {
+      "kind": "ids",
+      "value": [
+        12,
+        34
+      ]
+    }
+  ]
+]
