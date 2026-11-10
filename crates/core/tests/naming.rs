@@ -1,3 +1,4 @@
+// tests/golden/*.json 은 1.3.0(파이썬) 구현이 만든 기준값이다. 한 번 뽑아 데이터로 두었고 다시 만들지 않는다.
 use dccon_core::models::{image_url, Package, IMAGE_BASE};
 use dccon_core::naming::{item_filename, package_dirname, pad_width, sanitize};
 use serde_json::Value;
