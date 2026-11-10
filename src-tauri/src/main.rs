@@ -9,6 +9,7 @@ mod dto;
 mod imgproto;
 mod login;
 mod queue;
+mod startup;
 mod state;
 
 use std::sync::Arc;
@@ -17,7 +18,15 @@ use dccon_core::config::Paths;
 use tauri::Manager;
 
 fn main() {
-    let state = Arc::new(state::AppState::new(Paths::system()));
+    let paths = Paths::system();
+    let _ = std::fs::create_dir_all(&paths.data);
+    startup::init_logging(&paths);
+    if !startup::ensure_webview2() {
+        return;
+    }
+    let failure = startup::cleanup(&paths);
+    let state = Arc::new(state::AppState::new(paths));
+    *state.last_error.lock().unwrap() = failure;
     // 1.3.0 이 남긴 것을 포함해 저장해 둔 아카라이브 세션을 화면이 뜨기 전에 붙인다.
     login::apply_saved(&state);
     tauri::Builder::default()

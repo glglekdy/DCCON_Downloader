@@ -258,7 +258,10 @@ pub async fn check_update(state: St<'_>, manual: bool) -> Result<Option<ReleaseI
     let release = match updater::fetch_latest(&http, &latest_url()).await {
         Ok(r) => r,
         Err(e) if manual => return Err(e.into()),
-        Err(_) => return Ok(None), // 시작할 때 확인은 오프라인이어도 조용히 넘어간다.
+        Err(e) => {
+            tracing::warn!("시작 업데이트 확인 실패: {e}");
+            return Ok(None);
+        } // 시작할 때 확인은 오프라인이어도 조용히 넘어간다.
     };
     let Some(release) = release else {
         return Ok(None);
