@@ -8,6 +8,7 @@ pub mod downloader;
 pub mod error;
 pub mod http;
 pub mod models;
+pub mod updater;
 pub mod naming;
 
 pub use error::{Error, Result};
