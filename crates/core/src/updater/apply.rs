@@ -31,16 +31,22 @@ pub fn apply(new_exe: &Path, current_exe: &Path) -> Result<()> {
     fs::rename(current_exe, &old).map_err(|e| {
         Error::Update(format!("이 폴더에 쓸 수 없어 업데이트를 적용하지 못했습니다. ({e})"))
     })?;
-    let moved = fs::rename(new_exe, current_exe).or_else(|_| {
+    let moved = fs::rename(new_exe, current_exe).or_else(|rename_err| {
         // 다른 볼륨 등으로 rename 이 안 되면 복사한 뒤 지운다.
-        fs::copy(new_exe, current_exe).map(|_| {
-            let _ = fs::remove_file(new_exe);
-        })
+        fs::copy(new_exe, current_exe)
+            .map(|_| {
+                let _ = fs::remove_file(new_exe);
+            })
+            .map_err(|copy_err| format!("{rename_err}; 복사도 실패: {copy_err}"))
     });
     if let Err(e) = moved {
         let _ = fs::remove_file(current_exe);
-        let _ = fs::rename(&old, current_exe);
-        return Err(Error::Update(format!("업데이트를 적용하지 못했습니다. ({e})")));
+        let mut msg = format!("업데이트를 적용하지 못했습니다. ({e})");
+        if fs::rename(&old, current_exe).is_err() {
+            let name = old.file_name().unwrap_or_default().to_string_lossy();
+            msg.push_str(&format!(" 이전 파일은 {name} 에 있습니다."));
+        }
+        return Err(Error::Update(msg));
     }
     Ok(())
 }
@@ -122,7 +128,7 @@ pub fn tidy_sibling_builds(
                 }
             }
         }
-        if !target.exists() && fs::rename(&exe, &target).is_ok() {
+        if matches!(target.try_exists(), Ok(false)) && rename_no_replace(&exe, &target).is_ok() {
             exe = target;
         }
     }
@@ -144,9 +150,34 @@ pub fn tidy_sibling_builds(
     (exe, removed)
 }
 
-/// 휴지통으로 보낸다.
+/// 이미 있는 파일은 덮어쓰지 않고 이름을 바꾼다. (윈도우의 `fs::rename` 은 덮어쓴다.)
+#[cfg(windows)]
+fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::MoveFileExW;
+    let f: Vec<u16> = from.as_os_str().encode_wide().chain(Some(0)).collect();
+    let t: Vec<u16> = to.as_os_str().encode_wide().chain(Some(0)).collect();
+    // 플래그 0 = 대상이 있으면 실패.
+    if unsafe { MoveFileExW(f.as_ptr(), t.as_ptr(), 0) } == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
+    if to.try_exists()? {
+        return Err(std::io::ErrorKind::AlreadyExists.into());
+    }
+    fs::rename(from, to)
+}
+
+/// 휴지통으로 보낸다. `trash` 는 COM 초기화에 실패하면(예: MTA 스레드) 패닉할 수 있어
+/// 잡아서 false 로 돌려준다. 가능하면 COM 을 건드리지 않은 스레드(STA/미초기화)에서 부른다.
 pub fn recycle(path: &Path) -> bool {
-    trash::delete(path).is_ok()
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| trash::delete(path).is_ok()))
+        .unwrap_or(false)
 }
 
 #[cfg(windows)]
@@ -175,7 +206,10 @@ pub fn exe_file_version(path: &Path) -> Option<String> {
         {
             return None;
         }
-        let info = &*(ptr as *const VS_FIXEDFILEINFO);
+        let info = std::ptr::read_unaligned(ptr as *const VS_FIXEDFILEINFO);
+        if info.dwSignature != 0xFEEF04BD {
+            return None;
+        }
         let (ms, ls) = (info.dwFileVersionMS, info.dwFileVersionLS);
         Some(format!("{}.{}.{}", ms >> 16, ms & 0xFFFF, ls >> 16))
     }

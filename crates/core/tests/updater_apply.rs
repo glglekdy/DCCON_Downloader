@@ -106,6 +106,57 @@ fn tidy_keeps_newer_local_name() {
     assert_eq!(cur, exe);
     assert!(removed.is_empty());
     assert!(exe.exists());
+    assert!(d.path().join("디시콘 다운로더.exe").exists());
+}
+
+#[test]
+fn tidy_unknown_local_version_keeps_it() {
+    let d = tempfile::tempdir().unwrap();
+    let exe = d.path().join("dccon-downloader-2.0.1.exe");
+    write(&exe, b"n");
+    write(&d.path().join("디시콘 다운로더.exe"), b"l");
+    let (cur, removed) = tidy_sibling_builds(&exe, "2.0.1", &|_| None, &|_| panic!("no recycle"));
+    assert_eq!(cur, exe);
+    assert!(removed.is_empty());
+    assert_eq!(fs::read(d.path().join("디시콘 다운로더.exe")).unwrap(), b"l");
+    assert!(exe.exists());
+}
+
+#[test]
+fn tidy_replaces_older_local_name() {
+    let d = tempfile::tempdir().unwrap();
+    let exe = d.path().join("dccon-downloader-2.0.1.exe");
+    write(&exe, b"n");
+    write(&d.path().join("디시콘 다운로더.exe"), b"l");
+    let (cur, removed) = tidy_sibling_builds(&exe, "2.0.1", &|_| Some("1.9.0".into()), &|p| fs::remove_file(p).is_ok());
+    assert_eq!(cur, d.path().join("디시콘 다운로더.exe"));
+    assert_eq!(removed, vec!["디시콘 다운로더.exe".to_string()]);
+    assert_eq!(fs::read(&cur).unwrap(), b"n");
+    assert!(!exe.exists());
+}
+
+#[test]
+fn tidy_matches_win64_and_uppercase() {
+    let d = tempfile::tempdir().unwrap();
+    let exe = d.path().join("DCCON-Downloader-2.0.1-Win64.EXE");
+    write(&exe, b"n");
+    write(&d.path().join("dccon-downloader-1.0.0-win64.exe"), b"o");
+    let (cur, removed) = tidy_sibling_builds(&exe, "2.0.1", &|_| None, &|p| fs::remove_file(p).is_ok());
+    assert_eq!(cur, d.path().join("디시콘 다운로더.exe"));
+    assert_eq!(removed, vec!["dccon-downloader-1.0.0-win64.exe".to_string()]);
+}
+
+#[test]
+fn apply_replaces_existing_old() {
+    let d = tempfile::tempdir().unwrap();
+    let cur = d.path().join("app.exe");
+    let new = d.path().join("new.exe");
+    write(&cur, b"cur");
+    write(&new, b"new");
+    write(&d.path().join("app.exe.old"), b"stale");
+    apply(&new, &cur).unwrap();
+    assert_eq!(fs::read(&cur).unwrap(), b"new");
+    assert_eq!(fs::read(d.path().join("app.exe.old")).unwrap(), b"cur");
 }
 
 #[cfg(windows)]
