@@ -1,5 +1,6 @@
 //! 디시콘 다운로더 핵심 로직.
 
+pub mod arca;
 pub mod cache;
 pub mod config;
 pub mod dccon;
