@@ -33,6 +33,18 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(state)
+        .setup(|app| {
+            // WebView2 데이터는 DATA_DIR/webview 에 둔다 (로그인 창도 같은 폴더).
+            let state = app.state::<Arc<state::AppState>>().inner().clone();
+            let config = app.config().app.windows[0].clone();
+            if let Err(e) = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)
+                .and_then(|b| b.data_directory(state.paths.webview.clone()).build())
+            {
+                tracing::error!("메인 창을 만들지 못했다: {e}");
+                return Err(e.into());
+            }
+            Ok(())
+        })
         .register_asynchronous_uri_scheme_protocol("img", imgproto::handle)
         .on_window_event(|window, event| {
             // 메인 창이 사라지면 로그인 창도 닫아 앱이 끝나게 한다.

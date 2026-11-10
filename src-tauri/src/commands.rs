@@ -264,12 +264,17 @@ pub async fn check_update(state: St<'_>, manual: bool) -> Result<Option<ReleaseI
         } // 시작할 때 확인은 오프라인이어도 조용히 넘어간다.
     };
     let Some(release) = release else {
+        tracing::info!("업데이트 확인: 릴리즈 없음 (manual={manual})");
         return Ok(None);
     };
     let version = release.version();
     if !should_notify(&snapshot, manual, VERSION, &version) {
+        tracing::info!(
+            "업데이트 확인: 알릴 새 버전 없음 (최신 {version}, 현재 {VERSION}, manual={manual})"
+        );
         return Ok(None);
     }
+    tracing::info!("업데이트 확인: 새 버전 {version} (현재 {VERSION}, manual={manual})");
     let asset = updater::pick_asset(&release).map(|a| a.name.clone());
     let info = ReleaseInfo {
         version,
@@ -313,6 +318,7 @@ pub async fn download_update(app: AppHandle, state: St<'_>) -> Result<(), CmdErr
         slot.downloaded = None;
         (asset, tag, cancel)
     };
+    tracing::info!("업데이트 받기 시작: {} ({} 바이트)", asset.name, asset.size);
     let http = updater::http_client(VERSION);
     // 조각마다 보내면 화면이 밀리므로 0.5% 단위로만 알린다.
     let last = std::sync::atomic::AtomicU64::new(u64::MAX);
@@ -335,7 +341,14 @@ pub async fn download_update(app: AppHandle, state: St<'_>) -> Result<(), CmdErr
     .await;
     let mut slot = state.update.lock().unwrap();
     slot.cancel = None;
-    let path = result?;
+    let path = match result {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!("업데이트 받기 실패: {} ({e})", asset.name);
+            return Err(e.into());
+        }
+    };
+    tracing::info!("업데이트 받기 완료: {}", asset.name);
     slot.downloaded = Some(path);
     Ok(())
 }
@@ -360,7 +373,11 @@ pub fn apply_update(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
         .ok_or_else(|| update_err("받아 둔 업데이트가 없습니다."))?;
     let current = std::env::current_exe()
         .map_err(|e| update_err(format!("실행 파일 위치를 알 수 없습니다. ({e})")))?;
-    updater::apply::apply(&downloaded, &current)?;
+    tracing::info!("업데이트 적용 시작");
+    if let Err(e) = updater::apply::apply(&downloaded, &current) {
+        tracing::warn!("업데이트 적용 실패: {e}");
+        return Err(e.into());
+    }
     state.update.lock().unwrap().downloaded = None;
 
     let mut cmd = std::process::Command::new(&current);

@@ -14,7 +14,7 @@
 //! - 페이지에 스크립트를 넣지 않는다. 새 창(`window.open`, `target=_blank`)은 만들지 않고
 //!   웹 주소면 이 창에서 연다.
 //!
-//! 데이터 폴더는 따로 정하지 않아 메인 창과 같은 기본 WebView2 폴더를 함께 쓴다
+//! 데이터 폴더는 메인 창과 같은 `DATA_DIR/webview` 를 쓴다
 //! (한 프로세스에서 데이터 폴더 하나에 환경 하나). 그래서 아카라이브 쿠키가 남아
 //! 다음 로그인 때 다시 쓰인다. 세션이 만료되면(`login_required`) 세션 파일과 클라이언트
 //! 쿠키만 버리고 웹뷰 쿠키는 둔다 (`forget_session`). 웹뷰 쿠키까지 지우는 건 명시적
@@ -247,6 +247,8 @@ pub async fn open(app: &AppHandle, state: Arc<AppState>) -> Result<u64, CmdError
         .inner_size(480.0, 720.0)
         .center()
         .user_agent(&ua)
+        // 메인 창과 같은 데이터 폴더·같은 환경 옵션(브라우저 인자 없음)이어야 한 프로세스에서 공유된다.
+        .data_directory(state.paths.webview.clone())
         .on_navigation(allow_navigation)
         .on_new_window(on_new_window)
         // `tauri` 프로토콜(앱 화면) 응답에만 불린다. arca.live 같은 원격 요청은 오지 않는다.

@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "create": false,
         "title": "디시콘 다운로더",
         "width": 1180,
         "height": 780,
