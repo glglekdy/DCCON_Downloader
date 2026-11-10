@@ -1,7 +1,7 @@
 //! 앱 전역 상태.
 
-use std::sync::atomic::AtomicU64;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, RwLock};
 
 use dccon_core::cache::{ImageCache, MetaCache};

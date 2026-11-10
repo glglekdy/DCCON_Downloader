@@ -12,13 +12,19 @@ pub struct CmdError {
 
 impl CmdError {
     pub fn new(kind: &'static str, message: impl Into<String>) -> Self {
-        Self { kind, message: message.into() }
+        Self {
+            kind,
+            message: message.into(),
+        }
     }
 }
 
 impl From<Error> for CmdError {
     fn from(e: Error) -> Self {
-        Self { kind: e.kind(), message: e.user_message() }
+        Self {
+            kind: e.kind(),
+            message: e.user_message(),
+        }
     }
 }
 

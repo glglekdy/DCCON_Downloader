@@ -21,18 +21,24 @@ type Headers = Vec<(String, String)>;
 const ALLOWED_HOSTS: &[&str] = &["dcinside.com", "dcinside.co.kr", "arca.live", "namu.la"];
 
 fn url_allowed(raw: &str) -> bool {
-    let Ok(u) = url::Url::parse(raw) else { return false };
+    let Ok(u) = url::Url::parse(raw) else {
+        return false;
+    };
     if !matches!(u.scheme(), "http" | "https") {
         return false;
     }
-    let Some(host) = u.host_str() else { return false };
+    let Some(host) = u.host_str() else {
+        return false;
+    };
     let host = host.to_ascii_lowercase();
     // 테스트의 wiremock 서버(루프백)만 허용. 제품 빌드에는 들어가지 않는다.
     #[cfg(test)]
     if host == "127.0.0.1" || host == "localhost" {
         return true;
     }
-    ALLOWED_HOSTS.iter().any(|d| host == *d || host.ends_with(&format!(".{d}")))
+    ALLOWED_HOSTS
+        .iter()
+        .any(|d| host == *d || host.ends_with(&format!(".{d}")))
 }
 
 fn ext_allowed(ext: &str) -> bool {
@@ -65,20 +71,28 @@ enum Span {
 
 /// `bytes=a-b`, `bytes=a-`, `bytes=-n` 만 다룬다. 해석 못 하면 범위를 무시한다.
 fn parse_range(header: &str, total: usize) -> Span {
-    let Some(spec) = header.trim().strip_prefix("bytes=") else { return Span::Ignore };
+    let Some(spec) = header.trim().strip_prefix("bytes=") else {
+        return Span::Ignore;
+    };
     if spec.contains(',') {
         return Span::Ignore;
     }
-    let Some((a, b)) = spec.split_once('-') else { return Span::Ignore };
+    let Some((a, b)) = spec.split_once('-') else {
+        return Span::Ignore;
+    };
     let (a, b) = (a.trim(), b.trim());
     let (start, end) = if a.is_empty() {
-        let Ok(n) = b.parse::<usize>() else { return Span::Ignore };
+        let Ok(n) = b.parse::<usize>() else {
+            return Span::Ignore;
+        };
         if n == 0 || total == 0 {
             return Span::Unsatisfiable;
         }
         (total.saturating_sub(n), total - 1)
     } else {
-        let Ok(start) = a.parse::<usize>() else { return Span::Ignore };
+        let Ok(start) = a.parse::<usize>() else {
+            return Span::Ignore;
+        };
         let end = if b.is_empty() {
             usize::MAX
         } else {
@@ -171,7 +185,11 @@ pub(crate) async fn serve(
     if stale(generation) {
         return reply(204, vec![], Vec::new());
     }
-    match state.images.get(state.client(site), &url, &ext, &CancellationToken::new()).await {
+    match state
+        .images
+        .get(state.client(site), &url, &ext, &CancellationToken::new())
+        .await
+    {
         Ok(data) => respond_data(&ext, data, range),
         Err(_) => reply(502, vec![], Vec::new()),
     }
@@ -195,9 +213,12 @@ pub fn handle<R: Runtime>(
         for (k, v) in headers {
             b = b.header(k, v);
         }
-        let resp = b
-            .body(body)
-            .unwrap_or_else(|_| Response::builder().status(500).body(Vec::new()).expect("빈 응답"));
+        let resp = b.body(body).unwrap_or_else(|_| {
+            Response::builder()
+                .status(500)
+                .body(Vec::new())
+                .expect("빈 응답")
+        });
         responder.respond(resp);
     });
 }
@@ -215,9 +236,8 @@ mod tests {
     }
 
     fn q(url: &str, ext: &str, g: u64) -> String {
-        let enc =
-            percent_encoding::utf8_percent_encode(url, percent_encoding::NON_ALPHANUMERIC)
-                .to_string();
+        let enc = percent_encoding::utf8_percent_encode(url, percent_encoding::NON_ALPHANUMERIC)
+            .to_string();
         format!("u={enc}&e={ext}&g={g}&s=dccon")
     }
 
@@ -275,7 +295,10 @@ mod tests {
         assert_eq!(code, 200);
         assert_eq!(body, b"GIFDATA");
         assert_eq!(hdr(&h, "Content-Type"), Some("image/gif"));
-        assert_eq!(st.images.peek(&url, "gif").as_deref(), Some(&b"GIFDATA"[..]));
+        assert_eq!(
+            st.images.peek(&url, "gif").as_deref(),
+            Some(&b"GIFDATA"[..])
+        );
     }
 
     #[tokio::test]

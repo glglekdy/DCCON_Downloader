@@ -152,7 +152,13 @@ async fn run(
     let _ = app.emit(
         "queue-started",
         Started {
-            jobs: jobs.iter().map(|j| JobRef { id: j.id, title: j.title.clone() }).collect(),
+            jobs: jobs
+                .iter()
+                .map(|j| JobRef {
+                    id: j.id,
+                    title: j.title.clone(),
+                })
+                .collect(),
         },
     );
     let sem = Arc::new(Semaphore::new(settings.concurrency.max(1) as usize));
@@ -172,7 +178,10 @@ async fn run(
         let Some(permit) = permit else {
             let _ = app.emit(
                 "queue-error",
-                QueueError { id: job.id, message: Error::Cancelled.user_message() },
+                QueueError {
+                    id: job.id,
+                    message: Error::Cancelled.user_message(),
+                },
             );
             continue;
         };
@@ -189,7 +198,11 @@ async fn run(
         ));
     }
 
-    let mut total = Finished { saved: 0, skipped: 0, failed: 0 };
+    let mut total = Finished {
+        saved: 0,
+        skipped: 0,
+        failed: 0,
+    };
     for (id, h) in handles {
         match h.await {
             Ok(Some((saved, skipped, failed))) => {
@@ -201,7 +214,10 @@ async fn run(
             Err(_) => {
                 let _ = app.emit(
                     "queue-error",
-                    QueueError { id, message: "알 수 없는 오류로 중단됨".into() },
+                    QueueError {
+                        id,
+                        message: "알 수 없는 오류로 중단됨".into(),
+                    },
                 );
             }
         }
@@ -228,7 +244,15 @@ async fn run_job(
         let package = state.load_package(site, job.id, cancel).await?;
         let id = job.id;
         let progress = |done: usize, total: usize, name: &str| {
-            let _ = app.emit("queue-progress", Progress { id, done, total, name: name.to_string() });
+            let _ = app.emit(
+                "queue-progress",
+                Progress {
+                    id,
+                    done,
+                    total,
+                    name: name.to_string(),
+                },
+            );
         };
         download_package(
             state.client(site),
@@ -260,7 +284,13 @@ async fn run_job(
             Some((r.saved, r.skipped, failed))
         }
         Err(e) => {
-            let _ = app.emit("queue-error", QueueError { id: job.id, message: e.user_message() });
+            let _ = app.emit(
+                "queue-error",
+                QueueError {
+                    id: job.id,
+                    message: e.user_message(),
+                },
+            );
             None
         }
     }
@@ -281,7 +311,11 @@ mod tests {
         };
         let err = prepare_dest(&settings, Site::Dccon).unwrap_err();
         assert_eq!(err.kind, "io");
-        assert!(err.message.starts_with("폴더를 만들 수 없습니다."), "{}", err.message);
+        assert!(
+            err.message.starts_with("폴더를 만들 수 없습니다."),
+            "{}",
+            err.message
+        );
     }
 
     #[test]
@@ -297,8 +331,14 @@ mod tests {
 
     #[test]
     fn dest_dir_for_arca() {
-        let settings = Settings { download_dir: "/x/dl".into(), ..Settings::default() };
-        assert_eq!(dest_dir(&settings, Site::Arca), PathBuf::from("/x/dl").join("arcacon"));
+        let settings = Settings {
+            download_dir: "/x/dl".into(),
+            ..Settings::default()
+        };
+        assert_eq!(
+            dest_dir(&settings, Site::Arca),
+            PathBuf::from("/x/dl").join("arcacon")
+        );
         assert_eq!(dest_dir(&settings, Site::Dccon), PathBuf::from("/x/dl"));
     }
 }
