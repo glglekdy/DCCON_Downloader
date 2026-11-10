@@ -195,10 +195,7 @@ async fn cancel_during_stalled_download() {
         let (mut sock, _) = l.accept().await.unwrap();
         let mut buf = [0u8; 2048];
         let _ = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await;
-        sock.write_all(b"HTTP/1.1 200 OK
-Content-Length: 1000000
-
-abc").await.unwrap();
+        sock.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\n\r\nabc").await.unwrap();
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
     });
     let tmp = tempfile::tempdir().unwrap();
