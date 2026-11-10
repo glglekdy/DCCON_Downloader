@@ -9,6 +9,8 @@ use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 use tokio_util::sync::CancellationToken;
 
+pub mod apply;
+
 use crate::{Error, Result};
 
 pub const REPO: &str = "glglekdy/DCCON_Downloader";
