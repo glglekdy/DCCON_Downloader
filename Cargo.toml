@@ -10,5 +10,4 @@ edition = "2021"
 opt-level = "s"
 lto = true
 codegen-units = 1
-panic = "abort"
 strip = true
