@@ -190,7 +190,12 @@
       return
     }
     // 그 사이 취소했거나 새로 시작했으면 이 시도의 결과는 받지 않는다.
-    if (mine !== loginSeq || loginPhase !== 'waiting') return
+    if (mine !== loginSeq) return
+    if (loginPhase !== 'waiting') {
+      // 취소가 창이 만들어지기 전에 도착했으면 그 창은 아직 열려 있다. 지금 닫는다.
+      void arcaLoginCancel().catch(() => undefined)
+      return
+    }
     loginId = id
     const early = earlyResults.get(id)
     earlyResults.clear()
