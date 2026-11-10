@@ -142,6 +142,8 @@
 
   // 마우스 4번 = 뒤로, 5번 = 앞으로 (button 3, 4). 브라우저와 같다.
   function mouseButton(e: MouseEvent) {
+    // 모달이 떠 있으면 뒤 화면은 움직이지 않는다.
+    if ($modalStack.length > 0) return
     if (e.button === 3) {
       e.preventDefault()
       if (e.type === 'mouseup') goBack()

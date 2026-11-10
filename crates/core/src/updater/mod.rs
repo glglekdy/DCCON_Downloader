@@ -231,6 +231,8 @@ async fn stream_to(
         return Err(Error::Cancelled);
     }
     file.flush().await?;
+    // 전원이 나가도 잘린 exe 가 남지 않게 디스크에 내린 뒤 이름을 바꾼다.
+    file.sync_all().await?;
     drop(file);
 
     if asset.size > 0 && done != asset.size {

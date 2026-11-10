@@ -25,7 +25,7 @@
     opener = document.activeElement
     id = pushModal()
     // 처음 포커스는 안쪽 첫 입력(없으면 상자 자체)에.
-    ;(focusables()[0] ?? box)?.focus()
+    ;(box?.querySelector<HTMLElement>('[data-autofocus]') ?? focusables()[0] ?? box)?.focus()
   })
 
   onDestroy(() => {

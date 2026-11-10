@@ -19,8 +19,16 @@
     release,
     version,
     offerSkip = false,
+    beforeApply,
     onClose,
-  }: { release: ReleaseInfo; version: string; offerSkip?: boolean; onClose: () => void } = $props()
+  }: {
+    release: ReleaseInfo
+    version: string
+    offerSkip?: boolean
+    /** 앱이 꺼지기 전에 할 일(설정 저장 등). */
+    beforeApply?: () => Promise<void>
+    onClose: () => void
+  } = $props()
 
   type Phase = 'idle' | 'downloading' | 'error' | 'confirm'
   let phase = $state<Phase>('idle')
@@ -37,9 +45,10 @@
       return '이 실행 방식에서는 자동 업데이트를 할 수 없습니다. 릴리즈 페이지에서 받아주세요.'
     if (phase === 'error') return `업데이트를 받지 못했습니다.\n${errorText}`
     if (phase === 'downloading') {
+      const name = release.asset_name ?? ''
       return progress && progress.total > 0
-        ? `${mb(progress.done)} / ${mb(progress.total)} MB`
-        : '받는 중…'
+        ? `${name}  ${mb(progress.done)} / ${mb(progress.total)} MB`
+        : `${name} 받는 중…`
     }
     return ''
   })
@@ -101,11 +110,17 @@
 
   async function apply() {
     try {
+      try {
+        await beforeApply?.()
+      } catch {
+        // 설정을 못 저장해도 업데이트는 계속한다.
+      }
       await applyUpdate()
       // 성공하면 앱이 종료된다.
     } catch (e) {
       if (closed) return
-      showNotice(fail(e))
+      showNotice(isCmdError(e) && e.kind === 'update' ? `업데이트를 시작하지 못했습니다.
+${fail(e)}` : fail(e))
       // 교체에 실패하면 손으로 받을 수 있게 릴리즈 페이지를 연다. 이미 적용된 뒤라면 열지 않는다.
       if (!(isCmdError(e) && e.kind === 'restart')) await openPage()
       onClose()
@@ -131,7 +146,7 @@
     </p>
     <div class="buttons">
       <button type="button" onclick={onClose}>아니요</button>
-      <button type="button" class="primary" onclick={apply}>예</button>
+      <button type="button" class="primary" data-autofocus onclick={apply}>예</button>
     </div>
   {:else}
     <h2 class="crumb">새 버전 {release.version}</h2>
@@ -166,7 +181,14 @@
       <button type="button" onclick={close}>
         {phase === 'downloading' ? '취소' : phase === 'error' ? '닫기' : '나중에'}
       </button>
-      <button type="button" class="primary" disabled={phase === 'downloading'} onclick={start}>
+      <!-- 처음 포커스를 받아 Enter 가 기본 동작이 된다 (파이썬판 setDefault) -->
+      <button
+        type="button"
+        class="primary"
+        data-autofocus
+        disabled={phase === 'downloading'}
+        onclick={start}
+      >
         {phase === 'error' ? '다시 시도' : release.can_apply ? '지금 업데이트' : '릴리즈 페이지 열기'}
       </button>
     </div>

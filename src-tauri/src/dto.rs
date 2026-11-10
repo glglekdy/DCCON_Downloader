@@ -43,6 +43,8 @@ pub struct ReleaseInfo {
     pub notes: String,
     pub page_url: String,
     pub can_apply: bool,
+    /// 받을 파일 이름. 없으면 자동 업데이트를 할 수 없다.
+    pub asset_name: Option<String>,
 }
 
 #[derive(Serialize, Debug)]

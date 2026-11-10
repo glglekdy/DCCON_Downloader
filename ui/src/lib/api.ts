@@ -70,6 +70,7 @@ export interface ReleaseInfo {
   notes: string
   page_url: string
   can_apply: boolean
+  asset_name: string | null
 }
 
 export interface CacheStats {

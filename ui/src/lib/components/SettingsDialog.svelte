@@ -27,7 +27,11 @@
 
   // 저장 전까지는 사본만 고친다. 취소하면 그대로 버린다.
   // svelte-ignore state_referenced_locally
-  let draft = $state<Settings>({ ...initial })
+  let draft = $state<Settings>({
+    ...initial,
+    concurrency: Math.min(16, Math.max(1, initial.concurrency)),
+    theme: THEMES.some(([k]) => k === initial.theme) ? initial.theme : 'system',
+  })
   let version = $state('')
   let cacheLabel = $state('계산 중…')
   let updateNote = $state('')
@@ -97,11 +101,9 @@
     }
   }
 
-  async function save() {
-    if (saving) return
-    saving = true
-    try {
-      await updateSettings({
+  /** 창을 닫지 않고 저장만 한다. 업데이트로 앱이 꺼지기 전에도 쓴다. */
+  async function persist() {
+    await updateSettings({
         download_dir: draft.download_dir.trim() || initial.download_dir,
         concurrency: draft.concurrency,
         save_main_image: draft.save_main_image,
@@ -110,7 +112,14 @@
         theme: draft.theme,
         animate_gifs: draft.animate_gifs,
         check_updates: draft.check_updates,
-      })
+    })
+  }
+
+  async function save() {
+    if (saving) return
+    saving = true
+    try {
+      await persist()
       onClose()
     } catch (e) {
       showNotice(isCmdError(e) ? e.message : String(e))
@@ -139,7 +148,7 @@
     <div class="field">
       <label for="s-conc">동시 다운로드</label>
       <div class="row">
-        <input id="s-conc" type="range" min="1" max="8" bind:value={draft.concurrency} />
+        <input id="s-conc" type="range" min="1" max="16" bind:value={draft.concurrency} />
         <span class="num">{draft.concurrency}</span>
       </div>
     </div>
@@ -214,7 +223,13 @@
 {/if}
 
 {#if release}
-  <UpdateDialog {release} {version} offerSkip={false} onClose={() => (release = null)} />
+  <UpdateDialog
+    {release}
+    {version}
+    offerSkip={false}
+    beforeApply={persist}
+    onClose={() => (release = null)}
+  />
 {/if}
 
 <style>

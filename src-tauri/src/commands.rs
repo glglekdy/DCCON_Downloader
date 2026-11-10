@@ -209,11 +209,14 @@ pub async fn check_update(state: St<'_>, manual: bool) -> Result<Option<ReleaseI
     if !should_notify(&snapshot, manual, VERSION, &version) {
         return Ok(None);
     }
+    let asset = updater::pick_asset(&release).map(|a| a.name.clone());
     let info = ReleaseInfo {
         version,
         notes: release.notes.clone(),
         page_url: release.page_url.clone(),
-        can_apply: can_apply(),
+        // 받을 exe 가 없는 릴리즈는 자동 업데이트 대신 릴리즈 페이지를 안내한다.
+        can_apply: can_apply() && asset.is_some(),
+        asset_name: asset,
     };
     let mut slot = state.update.lock().unwrap();
     slot.release = Some(release);
@@ -223,7 +226,7 @@ pub async fn check_update(state: St<'_>, manual: bool) -> Result<Option<ReleaseI
 
 #[tauri::command]
 pub async fn download_update(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
-    let (asset, cancel) = {
+    let (asset, tag, cancel) = {
         let mut slot = state.update.lock().unwrap();
         if slot.cancel.is_some() {
             return Err(update_err("이미 받는 중입니다."));
@@ -233,10 +236,14 @@ pub async fn download_update(app: AppHandle, state: St<'_>) -> Result<(), CmdErr
         let asset = updater::pick_asset(&release)
             .cloned()
             .ok_or_else(|| update_err("이 실행 방식에 맞는 업데이트 파일을 찾지 못했습니다."))?;
+        let tag = release.tag.clone();
+        if tag.is_empty() || tag.contains('/') || tag.contains('\\') || tag.contains("..") {
+            return Err(update_err("잘못된 릴리즈 이름입니다."));
+        }
         let cancel = CancellationToken::new();
         slot.cancel = Some(cancel.clone());
         slot.downloaded = None;
-        (asset, cancel)
+        (asset, tag, cancel)
     };
     let http = updater::http_client(VERSION);
     // 조각마다 보내면 화면이 밀리므로 0.5% 단위로만 알린다.
@@ -247,7 +254,7 @@ pub async fn download_update(app: AppHandle, state: St<'_>) -> Result<(), CmdErr
             let _ = app.emit("update-progress", json!({ "done": done, "total": total }));
         }
     };
-    let result = updater::download(&http, &asset, &state.paths.update, &progress, &cancel).await;
+    let result = updater::download(&http, &asset, &state.paths.update.join(&tag), &progress, &cancel).await;
     let mut slot = state.update.lock().unwrap();
     slot.cancel = None;
     let path = result?;
@@ -264,7 +271,7 @@ pub fn cancel_update(state: St<'_>) -> Result<(), CmdError> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_update(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
     let downloaded = state
         .update
@@ -299,8 +306,10 @@ pub fn apply_update(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
 #[tauri::command(async)]
 pub fn skip_version(state: St<'_>, version: String) -> Result<(), CmdError> {
     let mut current = state.settings.write().unwrap();
-    current.skipped_version = version;
-    current.save(&state.paths.settings).map_err(Error::Io)?;
+    let mut next = current.clone();
+    next.skipped_version = version;
+    next.save(&state.paths.settings).map_err(Error::Io)?;
+    *current = next;
     Ok(())
 }
 

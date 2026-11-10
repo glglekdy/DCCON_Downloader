@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte'
+  import { get } from 'svelte/store'
+  import { modalStack } from '../stores/modal'
 
   interface Props {
     page: number
@@ -30,7 +32,7 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
+<svelte:window onkeydown={(e) => e.key === 'Escape' && get(modalStack).length === 0 && onClose()} />
 
 <div class="backdrop" role="presentation" onmousedown={onClose}>
   <div
