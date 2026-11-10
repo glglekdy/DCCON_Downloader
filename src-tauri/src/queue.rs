@@ -77,6 +77,15 @@ pub fn prepare_dest(settings: &Settings, site: Site) -> Result<PathBuf, CmdError
     Ok(dest)
 }
 
+fn busy() -> CmdError {
+    CmdError::new("busy", "이미 다운로드 중입니다.")
+}
+
+fn resume_clients(state: &AppState) {
+    state.dccon.resume();
+    state.arca.resume();
+}
+
 impl Queue {
     pub fn start(
         &self,
@@ -85,19 +94,23 @@ impl Queue {
         site: Site,
         jobs: Vec<Job>,
     ) -> Result<(), CmdError> {
-        let mut active = self.active.lock().unwrap();
-        if active.is_some() {
-            return Err(CmdError::new("busy", "이미 다운로드 중입니다."));
+        if self.active.lock().unwrap().is_some() {
+            return Err(busy());
         }
         let settings = state.settings.read().unwrap().clone();
         let dest = prepare_dest(&settings, site)?;
         let cancel = CancellationToken::new();
-        *active = Some(cancel.clone());
-        drop(active);
+        {
+            // 확인과 설정만 락 안에서 한다.
+            let mut active = self.active.lock().unwrap();
+            if active.is_some() {
+                return Err(busy());
+            }
+            *active = Some(cancel.clone());
+        }
 
         // 이전에 일시정지해 둔 채로 시작해도 멈춰 있지 않게 한다.
-        state.dccon.resume();
-        state.arca.resume();
+        resume_clients(&state);
 
         tauri::async_runtime::spawn(run(app, state, site, jobs, settings, dest, cancel));
         Ok(())
@@ -114,10 +127,12 @@ impl Queue {
         }
     }
 
-    pub fn cancel(&self) {
+    /// 실행을 취소한다. 일시정지로 멈춰 있던 클라이언트도 풀어 둔다.
+    pub fn cancel(&self, state: &AppState) {
         if let Some(t) = self.active.lock().unwrap().as_ref() {
             t.cancel();
         }
+        resume_clients(state);
     }
 
     fn finish(&self) {
@@ -149,41 +164,64 @@ async fn run(
 
     let mut handles = Vec::new();
     for job in jobs {
-        let (app, state, sem, cancel) = (app.clone(), state.clone(), sem.clone(), cancel.clone());
+        // 순서대로 시작하도록 자리를 먼저 잡는다. 취소되면 기다리지 않는다.
+        let permit = tokio::select! {
+            p = sem.clone().acquire_owned() => p.ok(),
+            _ = cancel.cancelled() => None,
+        };
+        let Some(permit) = permit else {
+            let _ = app.emit(
+                "queue-error",
+                QueueError { id: job.id, message: Error::Cancelled.user_message() },
+            );
+            continue;
+        };
+        let id = job.id;
+        let (app, state, cancel) = (app.clone(), state.clone(), cancel.clone());
         let (dest, opts) = (dest.clone(), opts.clone());
-        handles.push(tauri::async_runtime::spawn(async move {
-            run_job(&app, &state, site, job, &sem, &dest, &opts, &cancel).await
-        }));
+        handles.push((
+            id,
+            tauri::async_runtime::spawn(async move {
+                let r = run_job(&app, &state, site, job, &dest, &opts, &cancel).await;
+                drop(permit);
+                r
+            }),
+        ));
     }
 
     let mut total = Finished { saved: 0, skipped: 0, failed: 0 };
-    for h in handles {
-        if let Ok(Some((saved, skipped, failed))) = h.await {
-            total.saved += saved;
-            total.skipped += skipped;
-            total.failed += failed;
+    for (id, h) in handles {
+        match h.await {
+            Ok(Some((saved, skipped, failed))) => {
+                total.saved += saved;
+                total.skipped += skipped;
+                total.failed += failed;
+            }
+            Ok(None) => {}
+            Err(_) => {
+                let _ = app.emit(
+                    "queue-error",
+                    QueueError { id, message: "알 수 없는 오류로 중단됨".into() },
+                );
+            }
         }
     }
+    // 일시정지한 채 끝나도 이후 탐색이 멈추지 않게 한다.
+    resume_clients(&state);
     state.queue.finish();
     let _ = app.emit("queue-finished", total);
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn run_job(
     app: &AppHandle,
     state: &AppState,
     site: Site,
     job: Job,
-    sem: &Semaphore,
     dest: &Path,
     opts: &DownloadOptions,
     cancel: &CancellationToken,
 ) -> Option<(u32, u32, u32)> {
     let outcome = async {
-        let _permit = tokio::select! {
-            p = sem.acquire() => p.map_err(|_| Error::Cancelled)?,
-            _ = cancel.cancelled() => return Err(Error::Cancelled),
-        };
         if cancel.is_cancelled() {
             return Err(Error::Cancelled);
         }
@@ -244,6 +282,17 @@ mod tests {
         let err = prepare_dest(&settings, Site::Dccon).unwrap_err();
         assert_eq!(err.kind, "io");
         assert!(err.message.starts_with("폴더를 만들 수 없습니다."), "{}", err.message);
+    }
+
+    #[test]
+    fn cancel_resumes_paused_clients() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::new(dccon_core::config::Paths::new(dir.path().to_path_buf()));
+        *state.queue.active.lock().unwrap() = Some(CancellationToken::new());
+        state.queue.pause(&state, true);
+        assert!(state.dccon.is_paused() && state.arca.is_paused());
+        state.queue.cancel(&state);
+        assert!(!state.dccon.is_paused() && !state.arca.is_paused());
     }
 
     #[test]

@@ -754,7 +754,6 @@ version = "2.0.0"
 dependencies = [
  "dccon-core",
  "serde",
- "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

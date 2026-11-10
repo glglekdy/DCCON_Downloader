@@ -16,16 +16,23 @@ use crate::state::AppState;
 
 type St<'a> = State<'a, Arc<AppState>>;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_settings(state: St<'_>) -> Result<Settings, CmdError> {
     Ok(state.settings.read().unwrap().clone())
 }
 
-#[tauri::command]
-pub fn save_settings(state: St<'_>, settings: Settings) -> Result<(), CmdError> {
+#[tauri::command(async)]
+pub fn save_settings(state: St<'_>, mut settings: Settings) -> Result<(), CmdError> {
     let n = settings.concurrency;
-    settings.save(&state.paths.settings).map_err(Error::Io)?;
-    *state.settings.write().unwrap() = settings;
+    {
+        // 저장은 쓰기 락을 잡은 채로 해서 동시 저장이 .tmp 를 두고 다투지 않게 한다.
+        let mut current = state.settings.write().unwrap();
+        // 앱이 관리하는 값은 프런트가 들고 있는 사본으로 덮지 않는다.
+        settings.recent_packages = current.recent_packages.clone();
+        settings.skipped_version = current.skipped_version.clone();
+        settings.save(&state.paths.settings).map_err(Error::Io)?;
+        *current = settings;
+    }
     state.apply_concurrency(n);
     Ok(())
 }
@@ -79,12 +86,11 @@ pub async fn search(
 pub async fn open_package(state: St<'_>, site: Site, id: u64) -> Result<Package, CmdError> {
     let _permit = state.nav_permit().await?;
     let package = state.load_package(site, id, &CancellationToken::new()).await?;
-    let snapshot = {
+    {
         let mut s = state.settings.write().unwrap();
         s.remember(id);
-        s.clone()
-    };
-    let _ = snapshot.save(&state.paths.settings);
+        let _ = s.save(&state.paths.settings);
+    }
     Ok(package)
 }
 
@@ -118,26 +124,26 @@ pub fn pause_queue(state: St<'_>, paused: bool) -> Result<(), CmdError> {
 
 #[tauri::command]
 pub fn cancel_queue(state: St<'_>) -> Result<(), CmdError> {
-    state.queue.cancel();
+    state.queue.cancel(&state);
     Ok(())
 }
 
 #[tauri::command]
 pub fn open_folder(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
     let dir = state.settings.read().unwrap().download_dir.clone();
-    std::fs::create_dir_all(&dir).map_err(|e| CmdError::new("io", e.to_string()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| CmdError::new("io", format!("폴더를 열 수 없습니다.\n{e}")))?;
     app.opener()
         .open_path(dir, None::<&str>)
-        .map_err(|e| CmdError::new("io", e.to_string()))
+        .map_err(|e| CmdError::new("io", format!("폴더를 열 수 없습니다.\n{e}")))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn cache_stats(state: St<'_>) -> Result<CacheStats, CmdError> {
     let (files, bytes) = state.images.stats();
     Ok(CacheStats { files, bytes })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_cache(state: St<'_>) -> Result<(), CmdError> {
     state.images.clear(&state.paths.cache_meta);
     Ok(())
