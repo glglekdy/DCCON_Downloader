@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onDestroy, onMount, tick } from 'svelte'
 
   interface Props {
     page: number
@@ -9,20 +9,23 @@
   }
   let { page, pages, onJump, onClose }: Props = $props()
 
-  let value = $state(0)
+  // svelte-ignore state_referenced_locally
+  let value = $state<number | null>(page)
+  const opener = document.activeElement as HTMLElement | null
   let input: HTMLInputElement | undefined = $state()
 
   onMount(async () => {
-    value = page
     await tick()
     input?.focus()
     input?.select()
   })
 
+  onDestroy(() => opener?.focus?.())
+
   function submit(e: Event) {
     e.preventDefault()
-    const n = Math.round(Number(value))
-    if (Number.isFinite(n)) onJump(Math.max(1, Math.min(pages, n)))
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return
+    onJump(Math.max(1, Math.min(pages, Math.round(Number(value)))))
     onClose()
   }
 </script>

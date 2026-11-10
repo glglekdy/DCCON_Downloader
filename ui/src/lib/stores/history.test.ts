@@ -57,13 +57,33 @@ describe('createHistory', () => {
     expect(h.canForward).toBe(true)
   })
 
-  it('replace 는 현재 항목만 바꾸고 앞쪽 기록을 지운다', () => {
+  it('replace 는 현재 항목만 바꾸고 앞쪽 기록은 둔다', () => {
     const h = createHistory()
     h.push(A, 0)
     h.push(B, 0)
     h.back(0)
     h.replace(top('week'))
-    expect(h.canForward).toBe(false)
+    expect(h.canForward).toBe(true)
     expect(h.canBack).toBe(false)
+    expect(h.forward(0)?.view).toEqual(B)
+  })
+
+  it('스크롤을 안 주면 저장된 위치를 덮어쓰지 않는다', () => {
+    const h = createHistory()
+    h.push(B, 0)
+    h.push(C, 300)
+    h.back(40)
+    h.forward() // 40 은 C 에 저장됨, B 는 300 그대로
+    expect(h.back()?.scrollY).toBe(300)
+    expect(h.forward()?.scrollY).toBe(40)
+  })
+
+  it('clear', () => {
+    const h = createHistory()
+    h.push(A, 0)
+    h.push(B, 0)
+    h.clear()
+    expect(h.canBack).toBe(false)
+    expect(h.canForward).toBe(false)
   })
 })

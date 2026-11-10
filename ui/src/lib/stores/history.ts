@@ -8,12 +8,14 @@ export interface Entry {
 
 export interface History {
   /** 새 화면으로 간다. scrollY 는 지금 떠나는 화면의 스크롤 위치. 앞쪽 기록은 지워진다. */
-  push(view: View, scrollY: number): void
-  /** 지금 항목을 바꾼다(쪽 넘김·탭 전환). 앞쪽 기록은 지워진다. */
+  push(view: View, scrollY?: number): void
+  /** 지금 항목을 바꾼다(쪽 넘김·탭 전환). 앞쪽 기록은 그대로 둔다. */
   replace(view: View): void
   /** scrollY 는 지금 떠나는 화면의 스크롤 위치. 돌아갈 곳이 없으면 null. */
   back(scrollY?: number): Entry | null
   forward(scrollY?: number): Entry | null
+  /** 모두 지운다(사이트 전환). */
+  clear(): void
   readonly canBack: boolean
   readonly canForward: boolean
 }
@@ -24,7 +26,7 @@ export function createHistory(): History {
 
   return {
     push(view, scrollY) {
-      if (index >= 0) entries[index].scrollY = scrollY
+      if (index >= 0 && scrollY !== undefined) entries[index].scrollY = scrollY
       entries.length = index + 1
       entries.push({ view, scrollY: 0 })
       index = entries.length - 1
@@ -35,20 +37,23 @@ export function createHistory(): History {
         index = 0
         return
       }
-      entries.length = index + 1
       entries[index] = { view, scrollY: 0 }
     },
-    back(scrollY = 0) {
+    back(scrollY) {
       if (index <= 0) return null
-      entries[index].scrollY = scrollY
+      if (scrollY !== undefined) entries[index].scrollY = scrollY
       index -= 1
       return { ...entries[index] }
     },
-    forward(scrollY = 0) {
+    forward(scrollY) {
       if (index < 0 || index >= entries.length - 1) return null
-      entries[index].scrollY = scrollY
+      if (scrollY !== undefined) entries[index].scrollY = scrollY
       index += 1
       return { ...entries[index] }
+    },
+    clear() {
+      entries.length = 0
+      index = -1
     },
     get canBack() {
       return index > 0

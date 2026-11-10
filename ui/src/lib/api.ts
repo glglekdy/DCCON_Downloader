@@ -124,6 +124,14 @@ export function imgUrl(url: string, ext: string, gen: number, site: Site): strin
   return `${base}?u=${encodeURIComponent(url)}&e=${encodeURIComponent(ext)}&g=${gen}&s=${site}`
 }
 
+const IMAGE_BASE = 'https://dcimg5.dcinside.com/dccon.php?no='
+
+/** core 의 image_url 과 같다: 전체 주소면 그대로, 디시콘의 상대 토큰이면 이미지 서버 주소를 붙인다.
+ *  Item.path, Package.main_img_path 에 쓴다. */
+export function imageUrl(path: string): string {
+  return /^https?:\/\//.test(path) ? path : IMAGE_BASE + path
+}
+
 /** 백엔드는 확장자를 ^[A-Za-z0-9]{1,5}$ 로만 받는다. 아니면 "img". */
 export function safeExt(ext: string): string {
   return /^[A-Za-z0-9]{1,5}$/.test(ext) ? ext : 'img'

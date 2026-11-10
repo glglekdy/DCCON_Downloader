@@ -33,9 +33,12 @@
       const scale = Math.min(144 / img.naturalWidth, 144 / img.naturalHeight, 1)
       const w = Math.max(1, Math.round(img.naturalWidth * scale))
       const h = Math.max(1, Math.round(img.naturalHeight * scale))
-      target.width = w
-      target.height = h
-      target.getContext('2d')?.drawImage(img, 0, 0, w, h)
+      const dpr = window.devicePixelRatio || 1
+      target.width = Math.max(1, Math.round(w * dpr))
+      target.height = Math.max(1, Math.round(h * dpr))
+      target.style.width = `${w}px`
+      target.style.height = `${h}px`
+      target.getContext('2d')?.drawImage(img, 0, 0, target.width, target.height)
     }
     img.onerror = () => (failed = true)
     img.src = mainUrl
@@ -82,11 +85,13 @@
     overflow: hidden;
   }
   img,
-  video,
-  canvas {
+  video {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
+    display: block;
+  }
+  canvas {
     display: block;
   }
 </style>

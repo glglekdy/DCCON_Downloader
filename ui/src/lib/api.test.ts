@@ -23,6 +23,18 @@ describe('imgUrl', () => {
   })
 })
 
+describe('imageUrl', () => {
+  it('상대 토큰에는 이미지 서버 주소를 붙인다', async () => {
+    const { imageUrl } = await import('./api')
+    expect(imageUrl('abc123')).toBe('https://dcimg5.dcinside.com/dccon.php?no=abc123')
+  })
+  it('https/http 주소는 그대로', async () => {
+    const { imageUrl } = await import('./api')
+    expect(imageUrl('https://x/y.gif')).toBe('https://x/y.gif')
+    expect(imageUrl('http://x/y.gif')).toBe('http://x/y.gif')
+  })
+})
+
 describe('ext 보호', () => {
   it('extFromUrl', async () => {
     const { extFromUrl, safeExt } = await import('./api')

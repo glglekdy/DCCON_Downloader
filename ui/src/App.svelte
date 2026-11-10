@@ -7,10 +7,12 @@
   import SearchBar from './lib/components/SearchBar.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
   import { activeTab, currentSite, loading } from './lib/stores/nav'
+  import { dismissNotice, notice, showNotice } from './lib/stores/notice'
   import { loadSettings } from './lib/stores/settings'
   import {
     goBack,
     goForward,
+    resetHistory,
     setScroller,
     showView,
     viewState,
@@ -41,8 +43,15 @@
         if (content) content.scrollTop = y
       },
     )
-    loadSettings().catch((e) => console.error('설정을 읽지 못했습니다', e))
-    void navigate('dccon', 'day')
+    // 설정(GIF 움직임 등)을 먼저 읽고 첫 화면을 연다. 못 읽으면 기본값으로 진행한다.
+    void (async () => {
+      try {
+        await loadSettings()
+      } catch (e) {
+        console.error('설정을 읽지 못했습니다', e)
+      }
+      await navigate('dccon', 'day')
+    })()
   })
 
   function navigate(site: Site, tab: string) {
@@ -52,6 +61,7 @@
   }
 
   function switchSite(site: Site) {
+    if (site !== $currentSite) resetHistory()
     void navigate(site, FIRST_TAB[site])
   }
 
@@ -74,7 +84,7 @@
         void showView({ kind: 'search', site, word: q.word, type, page: 1 })
       }
     } catch (e) {
-      console.error(isCmdError(e) ? e.message : e)
+      showNotice(isCmdError(e) ? e.message : String(e))
     }
   }
 
@@ -93,7 +103,7 @@
     try {
       await openFolder()
     } catch (e) {
-      console.error(isCmdError(e) ? e.message : e)
+      showNotice(isCmdError(e) ? e.message : String(e))
     }
   }
 </script>
@@ -114,6 +124,12 @@
     <SearchBar bind:this={searchBar} site={$currentSite} onSubmit={submit} />
     <LoadingLine active={$loading} />
     <Heading />
+    {#if $notice}
+      <div class="toast" role="status">
+        <span>{$notice}</span>
+        <button type="button" class="close" aria-label="닫기" onclick={dismissNotice}>×</button>
+      </div>
+    {/if}
     <div class="content" bind:this={content}>
       {#if $viewState.notice}
         <p class="notice">{$viewState.notice}</p>
@@ -140,6 +156,25 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+  }
+  .toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 28px 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--sel-label-bg);
+    color: var(--text);
+    font-size: 12px;
+    white-space: pre-line;
+  }
+  .close {
+    background: transparent;
+    padding: 0 6px;
+    min-height: 0;
+    color: var(--muted);
   }
   .notice {
     margin: 0;

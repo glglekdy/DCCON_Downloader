@@ -65,6 +65,25 @@ export const PACKAGE_HINT = '저장할 디시콘을 선택한 뒤 다운로드�
 const hist = createHistory()
 let seq = 0
 let current: View | null = null
+/** 지금 화면의 불러오기가 끝났는가. 끝나기 전에는 스크롤 위치를 기록하지 않는다. */
+let settled = false
+// begin_view 를 부른 순서대로 세대를 받는다.
+let begun: Promise<unknown> = Promise.resolve()
+function nextGeneration(): Promise<number> {
+  const p = begun.then(() => beginView(), () => beginView())
+  begun = p.catch(() => undefined)
+  return p
+}
+
+function scrollNow(): number | undefined {
+  return settled ? scroller.get() : undefined
+}
+
+/** 사이트를 바꿀 때 이동 기록을 비운다. */
+export function resetHistory(): void {
+  hist.clear()
+  syncNav()
+}
 
 /** 콘텐츠 스크롤 컨테이너를 App 이 등록한다. */
 const scroller = { get: (): number => 0, set: (_y: number): void => {} }
@@ -127,11 +146,13 @@ export async function showView(
   const record = opts.record ?? true
   const mine = ++seq
   if (record) {
-    if (v.kind === 'package') hist.push(v, scroller.get())
+    // 패키지는 목록·검색에서 열 때만 기록한다 (이미 패키지를 보고 있으면 제자리 교체).
+    if (v.kind === 'package' && current && current.kind !== 'package') hist.push(v, scrollNow())
     else hist.replace(v)
   }
   syncNav()
   current = v
+  settled = false
   const site = viewSite(v)
   currentSite.set(site)
   activeTab.set(tabOf(v))
@@ -143,14 +164,14 @@ export async function showView(
     site,
     crumb: crumbOf(v),
     hint: v.kind === 'package' ? PACKAGE_HINT : '',
-    paged: v.kind === 'all' || v.kind === 'arca' || v.kind === 'search',
+    paged: false,
     page: 'page' in v ? v.page : 1,
     pages: 'page' in v ? v.page : 1,
   })
   scroller.set(0)
 
   try {
-    const gen = await beginView()
+    const gen = await nextGeneration()
     if (mine !== seq) return
 
     if (v.kind === 'package') {
@@ -183,6 +204,7 @@ export async function showView(
       viewState.update((s) => ({
         ...s,
         gen,
+        paged: v.kind === 'all' || v.kind === 'arca' || v.kind === 'search',
         rows: res.items,
         page: res.page,
         pages: Math.max(res.pages, res.page),
@@ -196,9 +218,11 @@ export async function showView(
       }))
     }
     await tick()
+    if (mine === seq) settled = true
     if (mine === seq) scroller.set(opts.scrollY ?? 0)
   } catch (e) {
     if (mine !== seq) return
+    settled = true
     if (isCmdError(e) && e.kind === 'cancelled') return
     if (isCmdError(e) && e.kind === 'login_required') {
       loginNeeded.set(true)
@@ -213,12 +237,12 @@ export async function showView(
 }
 
 export function goBack(): void {
-  const e = hist.back(scroller.get())
+  const e = hist.back(scrollNow())
   if (e) void showView(e.view, { record: false, scrollY: e.scrollY })
 }
 
 export function goForward(): void {
-  const e = hist.forward(scroller.get())
+  const e = hist.forward(scrollNow())
   if (e) void showView(e.view, { record: false, scrollY: e.scrollY })
 }
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { extFromUrl, type Site } from '../api'
+  import { extFromUrl, imageUrl, type Site } from '../api'
   import { settings } from '../stores/settings'
   import { selection, showView, viewState } from '../stores/view'
   import Card from './Card.svelte'
@@ -24,7 +24,7 @@
         onToggle={() => selection.toggle(item.sort)}
       >
         <Thumb
-          src={item.path}
+          src={imageUrl(item.path)}
           ext={item.ext}
           poster={item.thumb ? { src: item.thumb, ext: extFromUrl(item.thumb) } : null}
           gen={$viewState.gen}
