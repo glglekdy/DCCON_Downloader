@@ -3,20 +3,30 @@
 mod commands;
 mod dto;
 mod imgproto;
+mod login;
 mod queue;
 mod state;
 
 use std::sync::Arc;
 
 use dccon_core::config::Paths;
+use tauri::Manager;
 
 fn main() {
     let state = Arc::new(state::AppState::new(Paths::system()));
+    // 1.3.0 이 남긴 것을 포함해 저장해 둔 아카라이브 세션을 화면이 뜨기 전에 붙인다.
+    login::apply_saved(&state);
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(state)
         .register_asynchronous_uri_scheme_protocol("img", imgproto::handle)
+        .on_window_event(|window, event| {
+            // 메인 창이 사라지면 로그인 창도 닫아 앱이 끝나게 한다.
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                login::on_main_destroyed(window.app_handle());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::save_settings,
@@ -40,6 +50,10 @@ fn main() {
             commands::skip_version,
             commands::open_release_page,
             commands::take_last_error,
+            commands::arca_status,
+            commands::arca_login,
+            commands::arca_login_cancel,
+            commands::arca_logout,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 실행 중 오류");

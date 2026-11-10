@@ -110,6 +110,23 @@ export const openFolder = () => invoke<void>('open_folder')
 export const cacheStats = () => invoke<CacheStats>('cache_stats')
 export const clearCache = () => invoke<void>('clear_cache')
 
+// --- 아카콘 로그인 -------------------------------------------------------
+
+/** 로그인 창이 끝나면 오는 `login-finished` 이벤트. 시도마다 한 번. */
+export interface LoginFinished {
+  ok: boolean
+  message: string
+}
+
+/** 저장한 아카라이브 세션이 있나. */
+export const arcaStatus = () => invoke<boolean>('arca_status')
+/** 로그인 창을 띄우고 바로 돌아온다. 결과는 `login-finished`. */
+export const arcaLogin = () => invoke<void>('arca_login')
+/** 떠 있는 로그인 창을 닫는다. */
+export const arcaLoginCancel = () => invoke<void>('arca_login_cancel')
+/** 세션과 쿠키를 지운다. */
+export const arcaLogout = () => invoke<void>('arca_logout')
+
 // --- 이벤트 -------------------------------------------------------------
 
 export function onEvent<T>(name: string, cb: (payload: T) => void): Promise<UnlistenFn> {

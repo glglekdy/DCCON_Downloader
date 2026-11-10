@@ -2,12 +2,18 @@
   import { getVersion } from '@tauri-apps/api/app'
   import { onMount } from 'svelte'
   import {
+    arcaLogin,
+    arcaLoginCancel,
+    arcaLogout,
+    arcaStatus,
     checkUpdate,
     enqueue,
     isCmdError,
+    onEvent,
     openFolder,
     parseInput,
     takeLastError,
+    type LoginFinished,
     type ReleaseInfo,
     type Site,
   } from './lib/api'
@@ -16,6 +22,7 @@
   import Grid from './lib/components/Grid.svelte'
   import Heading from './lib/components/Heading.svelte'
   import LoadingLine from './lib/components/LoadingLine.svelte'
+  import LoginPrompt, { type LoginPhase } from './lib/components/LoginPrompt.svelte'
   import SearchBar from './lib/components/SearchBar.svelte'
   import SettingsDialog from './lib/components/SettingsDialog.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
@@ -30,6 +37,7 @@
   import {
     goBack,
     goForward,
+    loginNeeded,
     resetHistory,
     setScroller,
     showView,
@@ -49,6 +57,9 @@
   /** 시작할 때 확인에서 찾은 새 버전. */
   let startupRelease = $state<ReleaseInfo | null>(null)
   let version = $state('')
+  /** 아카콘 로그인 창 단계. null 이면 닫혀 있다. */
+  let loginPhase = $state<LoginPhase | null>(null)
+  let loginMessage = $state('')
 
   export function focusSearch() {
     searchBar?.focus()
@@ -103,7 +114,28 @@
       await navigate('dccon', 'day')
       setTimeout(() => void startupCheck(), 1500)
     })()
-    return wireQueueEvents(queue)
+    // 목록이 login_required 로 실패하면 저장한 세션을 버리고 다시 로그인시킨다 (main_window._on_nav_error).
+    const offNeeded = loginNeeded.subscribe((needed) => {
+      if (!needed) return
+      loginNeeded.set(false)
+      if (loginPhase === 'waiting') return
+      void arcaLogout()
+        .catch(() => undefined)
+        .finally(requireLogin)
+    })
+    let closed = false
+    let offLogin: (() => void) | undefined
+    void onEvent<LoginFinished>('login-finished', onLoginFinished).then((u) => {
+      if (closed) u()
+      else offLogin = u
+    })
+    const offQueue = wireQueueEvents(queue)
+    return () => {
+      closed = true
+      offLogin?.()
+      offNeeded()
+      offQueue()
+    }
   })
 
   function navigate(site: Site, tab: string) {
@@ -112,9 +144,60 @@
     return showView({ kind: 'top', tab: tab as HomeTab })
   }
 
-  function switchSite(site: Site) {
+  async function switchSite(site: Site) {
+    // 세션이 없으면 로그인부터 묻는다. 세그먼트는 지금 사이트에 남는다 (main_window._switch_site).
+    if (site === 'arca' && !(await arcaStatus().catch(() => false))) {
+      requireLogin()
+      return
+    }
     if (site !== $currentSite) resetHistory()
     void navigate(site, FIRST_TAB[site])
+  }
+
+  // ------------------------------------------------- 아카콘 로그인 (main_window._require_login)
+  function requireLogin() {
+    if (loginPhase === 'waiting') return
+    loginMessage = ''
+    loginPhase = 'ask'
+  }
+
+  /** 아카콘을 보고 있었으면 디시콘으로 돌아간다. */
+  function leaveArca() {
+    if ($currentSite !== 'arca') return
+    resetHistory()
+    void navigate('dccon', FIRST_TAB.dccon)
+  }
+
+  async function startLogin() {
+    loginPhase = 'waiting'
+    try {
+      await arcaLogin()
+    } catch (e) {
+      if (loginPhase !== 'waiting') return
+      loginMessage = isCmdError(e) ? e.message : String(e)
+      loginPhase = 'failed'
+    }
+  }
+
+  /** 묻기 취소, 기다리기 취소, 실패 확인. 취소한 시도의 결과는 오더라도 무시한다. */
+  function closeLogin() {
+    const phase = loginPhase
+    loginPhase = null
+    if (phase === 'waiting') void arcaLoginCancel().catch(() => undefined)
+    leaveArca()
+  }
+
+  function onLoginFinished(r: LoginFinished) {
+    if (loginPhase !== 'waiting') return
+    if (r.ok) {
+      loginPhase = null
+      if (r.message) showNotice(r.message, 10000)
+      if ($currentSite !== 'arca') resetHistory()
+      void navigate('arca', FIRST_TAB.arca)
+    } else {
+      loginMessage = r.message
+      loginPhase = 'failed'
+    }
   }
 
   async function submit(raw: string, type: string) {
@@ -169,7 +252,7 @@
     site={$currentSite}
     tab={$activeTab}
     onNavigate={(site, tab) => void navigate(site, tab)}
-    onSite={switchSite}
+    onSite={(site) => void switchSite(site)}
     onHome={() => void navigate($currentSite, FIRST_TAB[$currentSite])}
     onOpenFolder={open}
     {onOpenSettings}
@@ -201,6 +284,9 @@
 
 {#if settingsOpen && $settings}
   <SettingsDialog initial={$settings} onClose={() => (settingsOpen = false)} />
+{/if}
+{#if loginPhase}
+  <LoginPrompt phase={loginPhase} message={loginMessage} onOk={startLogin} onCancel={closeLogin} />
 {/if}
 {#if startupRelease}
   <UpdateDialog

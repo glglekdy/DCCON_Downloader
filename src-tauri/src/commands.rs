@@ -14,6 +14,7 @@ use tauri_plugin_opener::OpenerExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::dto::{CacheStats, CmdError, Job, ListPage, ReleaseInfo};
+use crate::login;
 use crate::state::AppState;
 
 type St<'a> = State<'a, Arc<AppState>>;
@@ -168,6 +169,34 @@ pub fn cache_stats(state: St<'_>) -> Result<CacheStats, CmdError> {
 #[tauri::command(async)]
 pub fn clear_cache(state: St<'_>) -> Result<(), CmdError> {
     state.images.clear(&state.paths.cache_meta);
+    Ok(())
+}
+
+// ---------------------------------------------------------------- 아카콘 로그인
+/// 저장한 아카라이브 세션이 있나.
+#[tauri::command(async)]
+pub fn arca_status(state: St<'_>) -> Result<bool, CmdError> {
+    Ok(login::has_session(&state))
+}
+
+/// 로그인 창을 띄우고 바로 돌아온다. 끝나면 `login-finished {ok, message}`.
+/// 창 만들기는 동기 커맨드에서 하면 윈도우에서 멈추므로 async 로 둔다.
+#[tauri::command]
+pub async fn arca_login(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
+    login::open(&app, state.inner().clone())
+}
+
+/// 열려 있는 로그인 창을 닫는다 (앱에서 취소).
+#[tauri::command]
+pub async fn arca_login_cancel(app: AppHandle) -> Result<(), CmdError> {
+    login::cancel(&app);
+    Ok(())
+}
+
+/// 세션을 지운다. 웹뷰 쿠키 읽기·지우기는 메인 스레드에서 하면 멈추므로 async 로 둔다.
+#[tauri::command]
+pub async fn arca_logout(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
+    login::logout(&app, &state);
     Ok(())
 }
 
