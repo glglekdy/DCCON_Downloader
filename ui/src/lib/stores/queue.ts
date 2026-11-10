@@ -35,6 +35,8 @@ export interface Queue extends Readable<QueueState> {
   onFinished(p: { saved: number; skipped: number; failed: number }): void
   setPaused(paused: boolean): void
   markCancelling(): void
+  /** 중단 요청이 실패했을 때 "중단하는 중…" 을 되돌린다. */
+  clearCancelling(): void
   dismiss(): void
 }
 
@@ -98,6 +100,7 @@ export function createQueue(): Queue {
     },
     setPaused: (paused) => store.update((s) => ({ ...s, paused })),
     markCancelling: () => store.update((s) => (s.running ? { ...s, cancelling: true } : s)),
+    clearCancelling: () => store.update((s) => (s.cancelling ? { ...s, cancelling: false } : s)),
     dismiss: () => store.set(IDLE()),
   }
 }

@@ -38,7 +38,6 @@ pub struct Job {
 }
 
 #[derive(Serialize, Debug)]
-#[allow(dead_code)] // 업데이트 커맨드에서 쓴다 (이후 작업)
 pub struct ReleaseInfo {
     pub version: String,
     pub notes: String,

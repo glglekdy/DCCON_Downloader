@@ -148,3 +148,19 @@ export function extFromUrl(url: string): string {
   const m = /\.([A-Za-z0-9]{1,5})$/.exec(path)
   return m ? m[1] : 'img'
 }
+
+// --- 업데이트 -----------------------------------------------------------
+
+export interface UpdateProgress {
+  done: number
+  total: number
+}
+
+/** 새 버전이 없거나 알릴 필요가 없으면 null. manual=false 는 설정(끄기·건너뜀)을 따른다. */
+export const checkUpdate = (manual: boolean) => invoke<ReleaseInfo | null>('check_update', { manual })
+export const downloadUpdate = () => invoke<void>('download_update')
+export const cancelUpdate = () => invoke<void>('cancel_update')
+export const applyUpdate = () => invoke<void>('apply_update')
+export const skipVersion = (version: string) => invoke<void>('skip_version', { version })
+export const openReleasePage = () => invoke<void>('open_release_page')
+export const takeLastError = () => invoke<string | null>('take_last_error')

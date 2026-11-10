@@ -1,17 +1,30 @@
 //! 앱 전역 상태.
 
 use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, RwLock};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, RwLock};
 
 use dccon_core::cache::{ImageCache, MetaCache};
 use dccon_core::config::{Paths, Settings};
 use dccon_core::http::{Client, Throttle};
 use dccon_core::models::{Package, Site};
+use dccon_core::updater::Release;
 use dccon_core::{arca, dccon, Error};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use crate::queue::Queue;
+
+/// 업데이트 확인·받기 도중에 들고 있는 값.
+#[derive(Default)]
+pub struct UpdateSlot {
+    /// 마지막으로 확인한 새 릴리즈.
+    pub release: Option<Release>,
+    /// 받아 둔 새 exe.
+    pub downloaded: Option<PathBuf>,
+    /// 받는 중이면 취소용.
+    pub cancel: Option<CancellationToken>,
+}
 
 pub struct AppState {
     pub paths: Paths,
@@ -24,6 +37,9 @@ pub struct AppState {
     pub thumb: RwLock<Arc<Semaphore>>,
     pub view_gen: AtomicU64,
     pub queue: Queue,
+    pub update: Mutex<UpdateSlot>,
+    /// 지난 실행에서 남은 업데이트 실패 사유. 한 번 읽으면 비운다.
+    pub last_error: Mutex<Option<String>>,
 }
 
 fn thumb_permits(n: u32) -> usize {
@@ -44,8 +60,14 @@ impl AppState {
             thumb: RwLock::new(thumb),
             view_gen: AtomicU64::new(0),
             queue: Queue::default(),
+            update: Mutex::new(UpdateSlot::default()),
+            last_error: Mutex::new(None),
             paths,
         }
+    }
+
+    pub fn take_last_error(&self) -> Option<String> {
+        self.last_error.lock().unwrap().take()
     }
 
     pub fn client(&self, site: Site) -> &Client {

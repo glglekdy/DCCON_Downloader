@@ -107,3 +107,15 @@ describe('jobsFor', () => {
     expect(jobsFor({ pkg, rows: [] }, new Set())).toEqual([])
   })
 })
+
+describe('clearCancelling', () => {
+  it('중단 요청이 실패하면 중단하는 중 상태를 되돌린다', () => {
+    const q = createQueue()
+    q.onStarted({ jobs: two })
+    q.markCancelling()
+    expect(get(q).cancelling).toBe(true)
+    q.clearCancelling()
+    expect(get(q).cancelling).toBe(false)
+    expect(get(q).running).toBe(true)
+  })
+})

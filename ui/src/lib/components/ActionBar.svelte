@@ -12,14 +12,20 @@
     selection.setAll(s.pkg ? s.pkg.items.map((i) => i.sort) : s.rows.map((b) => b.idx), true)
   }
 
+  /** enqueue 가 돌아오기 전에 다시 누르면 같은 작업이 두 번 들어간다. */
+  let busy = $state(false)
+
   async function download() {
     const jobs = jobsFor(s, sel)
-    if (!jobs.length) return
+    if (!jobs.length || busy) return
+    busy = true
     try {
       await enqueue(s.site, jobs)
       selection.clear()
     } catch (e) {
       showNotice(isCmdError(e) ? e.message : String(e))
+    } finally {
+      busy = false
     }
   }
 </script>
@@ -29,7 +35,7 @@
   <span class="spacer"></span>
   <button type="button" class="ghost" onclick={() => selection.clear()}>선택 해제</button>
   <button type="button" class="ghost" onclick={selectAll}>전체 선택</button>
-  <button type="button" class="primary" disabled={sel.size === 0} onclick={download}>
+  <button type="button" class="primary" disabled={sel.size === 0 || busy} onclick={download}>
     다운로드
   </button>
 </div>

@@ -33,6 +33,13 @@ fn main() {
             commands::open_folder,
             commands::cache_stats,
             commands::clear_cache,
+            commands::check_update,
+            commands::download_update,
+            commands::cancel_update,
+            commands::apply_update,
+            commands::skip_version,
+            commands::open_release_page,
+            commands::take_last_error,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 실행 중 오류");

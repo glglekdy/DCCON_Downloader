@@ -12,23 +12,36 @@
     showNotice(isCmdError(e) ? e.message : String(e))
   }
 
+  /** 일시정지·중단 호출이 돌아오기 전에 다시 누르지 못하게 한다. */
+  let busy = $state(false)
+
   async function togglePause() {
+    if (busy) return
+    busy = true
     const next = !q.paused
     try {
       await pauseQueue(next)
       queue.setPaused(next)
     } catch (e) {
       fail(e)
+    } finally {
+      busy = false
     }
   }
 
   async function cancel() {
+    if (busy) return
+    busy = true
     // 파이썬판처럼 바로 "중단하는 중…" 을 보이고, 마지막 상태는 queue-finished 가 가져온다.
     queue.markCancelling()
     try {
       await cancelQueue()
     } catch (e) {
+      // 중단이 안 됐으니 되돌리고 알린다.
+      queue.clearCancelling()
       fail(e)
+    } finally {
+      busy = false
     }
   }
 </script>
@@ -77,10 +90,10 @@
       onclick={() => (expanded = !expanded)}>내역</button
     >
     {#if q.running}
-      <button type="button" class="ghost" disabled={q.cancelling} onclick={togglePause}>
+      <button type="button" class="ghost" disabled={q.cancelling || busy} onclick={togglePause}>
         {q.paused ? '재개' : '일시정지'}
       </button>
-      <button type="button" disabled={q.cancelling} onclick={cancel}>중단</button>
+      <button type="button" disabled={q.cancelling || busy} onclick={cancel}>중단</button>
     {:else}
       <button type="button" class="primary" onclick={() => queue.dismiss()}>확인</button>
     {/if}

@@ -1,18 +1,32 @@
 <script lang="ts">
+  import { getVersion } from '@tauri-apps/api/app'
   import { onMount } from 'svelte'
-  import { enqueue, isCmdError, openFolder, parseInput, type Site } from './lib/api'
+  import {
+    checkUpdate,
+    enqueue,
+    isCmdError,
+    openFolder,
+    parseInput,
+    takeLastError,
+    type ReleaseInfo,
+    type Site,
+  } from './lib/api'
   import Dock from './lib/components/Dock.svelte'
   import Glow from './lib/components/Glow.svelte'
   import Grid from './lib/components/Grid.svelte'
   import Heading from './lib/components/Heading.svelte'
   import LoadingLine from './lib/components/LoadingLine.svelte'
   import SearchBar from './lib/components/SearchBar.svelte'
+  import SettingsDialog from './lib/components/SettingsDialog.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
+  import UpdateDialog from './lib/components/UpdateDialog.svelte'
+  import { isFocusSearch } from './lib/shortcuts'
+  import { modalStack } from './lib/stores/modal'
   import { activeTab, currentSite, loading } from './lib/stores/nav'
   import { dismissNotice, notice, showNotice } from './lib/stores/notice'
   import { queue } from './lib/stores/queue'
   import { wireQueueEvents } from './lib/stores/queue-events'
-  import { loadSettings } from './lib/stores/settings'
+  import { loadSettings, settings } from './lib/stores/settings'
   import {
     goBack,
     goForward,
@@ -24,12 +38,6 @@
     type HomeTab,
   } from './lib/stores/view'
 
-  interface Props {
-    /** 설정 창은 Task 18 이 채운다. */
-    onOpenSettings?: () => void
-  }
-  let { onOpenSettings = () => {} }: Props = $props()
-
   const FIRST_TAB: Record<Site, string> = { dccon: 'day', arca: 'new' }
 
   let content: HTMLDivElement | undefined = $state()
@@ -37,9 +45,45 @@
   let dockPad = $state(0)
   let searchBar: ReturnType<typeof SearchBar> | undefined = $state()
 
-  /** 이후 단축키(Task 18)가 쓴다. */
+  let settingsOpen = $state(false)
+  /** 시작할 때 확인에서 찾은 새 버전. */
+  let startupRelease = $state<ReleaseInfo | null>(null)
+  let version = $state('')
+
   export function focusSearch() {
     searchBar?.focus()
+  }
+
+  function onOpenSettings() {
+    // 설정을 아직 못 읽었으면 열지 않는다 (기본값을 저장해 덮어쓰지 않도록).
+    if ($settings) settingsOpen = true
+  }
+
+  /** 시작하고 조금 뒤 새 버전을 조용히 확인한다 (main_window._startup_update_check). */
+  async function startupCheck() {
+    try {
+      const failure = await takeLastError()
+      if (failure) showNotice(failure, 10000)
+    } catch {
+      // 못 읽어도 업데이트 확인은 계속한다.
+    }
+    try {
+      const r = await checkUpdate(false)
+      if (r) {
+        version = await getVersion().catch(() => '')
+        startupRelease = r
+      }
+    } catch {
+      // 시작할 때 확인은 실패해도 알리지 않는다. 오프라인일 수도 있다.
+    }
+  }
+
+  function keydown(e: KeyboardEvent) {
+    if (isFocusSearch(e)) {
+      e.preventDefault()
+      // 모달이 떠 있으면 뒤의 입력창으로 포커스가 새지 않게 한다.
+      if ($modalStack.length === 0) focusSearch()
+    }
   }
 
   onMount(() => {
@@ -57,6 +101,7 @@
         console.error('설정을 읽지 못했습니다', e)
       }
       await navigate('dccon', 'day')
+      setTimeout(() => void startupCheck(), 1500)
     })()
     return wireQueueEvents(queue)
   })
@@ -115,7 +160,7 @@
   }
 </script>
 
-<svelte:window onmousedown={mouseButton} onmouseup={mouseButton} />
+<svelte:window onmousedown={mouseButton} onmouseup={mouseButton} onkeydown={keydown} />
 
 <div class="app">
   <Sidebar
@@ -151,6 +196,18 @@
     </div>
   </main>
 </div>
+
+{#if settingsOpen && $settings}
+  <SettingsDialog initial={$settings} onClose={() => (settingsOpen = false)} />
+{/if}
+{#if startupRelease}
+  <UpdateDialog
+    release={startupRelease}
+    {version}
+    offerSkip={true}
+    onClose={() => (startupRelease = null)}
+  />
+{/if}
 
 <style>
   .app {
