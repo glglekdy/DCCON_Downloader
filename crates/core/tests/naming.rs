@@ -55,6 +55,6 @@ fn image_url_passthrough() {
 
 #[test]
 fn backslash_never_survives() {
-    assert!(!sanitize("..\..\evil", "x").contains('\'));
-    assert_eq!(item_filename(1, "a\b", "png", 2), "01_a_b.png");
+    assert!(!sanitize("..\\..\\evil", "x").contains('\\'));
+    assert_eq!(item_filename(1, "a\\b", "png", 2), "01_a_b.png");
 }
