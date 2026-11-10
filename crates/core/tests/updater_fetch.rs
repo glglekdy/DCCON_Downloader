@@ -117,8 +117,7 @@ async fn fetch_latest_connection_error_message() {
     }
 }
 
-fn asset(url: String, body: &[u8], size: u64, digest: String) -> Asset {
-    let _ = body;
+fn asset(url: String, size: u64, digest: String) -> Asset {
     Asset { name: "app.exe".into(), url, size, digest }
 }
 
@@ -137,7 +136,7 @@ async fn download_verifies_size_and_digest() {
     let seen = std::sync::Mutex::new((0u64, 0u64));
     let prog = |d: u64, t: u64| *seen.lock().unwrap() = (d, t);
 
-    let ok = download(&c, &asset(url.clone(), body, body.len() as u64, good.clone()), &dir, &prog, &cancel).await.unwrap();
+    let ok = download(&c, &asset(url.clone(), body.len() as u64, good.clone()), &dir, &prog, &cancel).await.unwrap();
     assert_eq!(ok, dir.join("app.exe"));
     assert_eq!(std::fs::read(&ok).unwrap(), body);
     assert_eq!(*seen.lock().unwrap(), (body.len() as u64, body.len() as u64));
@@ -145,8 +144,8 @@ async fn download_verifies_size_and_digest() {
     std::fs::remove_file(&ok).unwrap();
 
     for a in [
-        asset(url.clone(), body, 3, good.clone()),
-        asset(url.clone(), body, body.len() as u64, "sha256:00".into()),
+        asset(url.clone(), 3, good.clone()),
+        asset(url.clone(), body.len() as u64, "sha256:00".into()),
     ] {
         let want = if a.size == 3 {
             "받은 파일 크기가 맞지 않습니다. 다시 시도하세요."
@@ -161,7 +160,7 @@ async fn download_verifies_size_and_digest() {
         assert!(!dir.join("app.exe").exists());
     }
 
-    match download(&c, &asset(format!("{}/gone", s.uri()), body, 0, String::new()), &dir, &prog, &cancel).await {
+    match download(&c, &asset(format!("{}/gone", s.uri()), 0, String::new()), &dir, &prog, &cancel).await {
         Err(Error::Update(m)) => assert_eq!(m, "파일을 받지 못했습니다. (HTTP 404)"),
         other => panic!("{other:?}"),
     }
@@ -169,8 +168,47 @@ async fn download_verifies_size_and_digest() {
 
     cancel.cancel();
     assert!(matches!(
-        download(&c, &asset(url, body, 0, String::new()), &dir, &prog, &cancel).await,
+        download(&c, &asset(url, 0, String::new()), &dir, &prog, &cancel).await,
         Err(Error::Cancelled)
     ));
     assert!(!dir.join("app.exe.part").exists());
+}
+
+#[tokio::test]
+async fn bad_asset_name_rejected() {
+    let tmp = tempfile::tempdir().unwrap();
+    for n in ["../x.exe", "a/b.exe", "a\\b.exe"] {
+        let a = Asset { name: n.into(), url: "http://127.0.0.1:1/".into(), size: 0, digest: String::new() };
+        match download(&http_client("1"), &a, tmp.path(), &|_, _| {}, &CancellationToken::new()).await {
+            Err(Error::Update(m)) => assert_eq!(m, "잘못된 파일 이름입니다."),
+            other => panic!("{other:?}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn cancel_during_stalled_download() {
+    use tokio::io::AsyncWriteExt;
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = l.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let (mut sock, _) = l.accept().await.unwrap();
+        let mut buf = [0u8; 2048];
+        let _ = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await;
+        sock.write_all(b"HTTP/1.1 200 OK
+Content-Length: 1000000
+
+abc").await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+    });
+    let tmp = tempfile::tempdir().unwrap();
+    let cancel = CancellationToken::new();
+    let c2 = cancel.clone();
+    let prog = move |_: u64, _: u64| c2.cancel();
+    let a = asset(format!("http://127.0.0.1:{port}/"), 0, String::new());
+    let start = std::time::Instant::now();
+    let r = download(&http_client("1"), &a, tmp.path(), &prog, &cancel).await;
+    assert!(matches!(r, Err(Error::Cancelled)), "{r:?}");
+    assert!(start.elapsed() < std::time::Duration::from_secs(5));
+    assert!(!tmp.path().join("app.exe.part").exists());
 }

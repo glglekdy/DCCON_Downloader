@@ -115,7 +115,7 @@ pub fn http_client(version: &str) -> reqwest::Client {
         .user_agent(format!("dccon-downloader/{version}"))
         .default_headers(headers)
         .redirect(reqwest::redirect::Policy::limited(10))
-        .timeout(Duration::from_secs(60))
+        .connect_timeout(Duration::from_secs(20))
         .build()
         .expect("reqwest client")
 }
@@ -138,6 +138,7 @@ fn kind_word(e: &reqwest::Error) -> &'static str {
 pub async fn fetch_latest(http: &reqwest::Client, url: &str) -> Result<Option<Release>> {
     let resp = http
         .get(url)
+        .timeout(Duration::from_secs(20))
         .send()
         .await
         .map_err(|e| Error::Update(format!("GitHub 에 연결하지 못했습니다. ({})", kind_word(&e))))?;
@@ -169,6 +170,10 @@ pub async fn download(
     progress: &(dyn Fn(u64, u64) + Send + Sync),
     cancel: &CancellationToken,
 ) -> Result<PathBuf> {
+    let n = asset.name.as_str();
+    if n.is_empty() || n.contains('/') || n.contains('\\') || n.contains("..") {
+        return Err(Error::Update("잘못된 파일 이름입니다.".into()));
+    }
     tokio::fs::create_dir_all(staging).await?;
     let target = staging.join(&asset.name);
     let part = staging.join(format!("{}.part", asset.name));
@@ -205,10 +210,15 @@ async fn stream_to(
     let mut hasher = Sha256::new();
     let mut done = 0u64;
     let mut stream = resp.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        if cancel.is_cancelled() {
-            return Err(Error::Cancelled);
-        }
+    loop {
+        let next = tokio::select! {
+            _ = cancel.cancelled() => return Err(Error::Cancelled),
+            r = tokio::time::timeout(Duration::from_secs(60), stream.next()) => r,
+        };
+        let Ok(next) = next else {
+            return Err(Error::Update("다운로드가 끊겼습니다. (timeout)".into()));
+        };
+        let Some(chunk) = next else { break };
         let chunk = chunk.map_err(cut)?;
         file.write_all(&chunk).await?;
         hasher.update(&chunk);
