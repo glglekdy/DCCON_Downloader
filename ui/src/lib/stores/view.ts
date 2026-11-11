@@ -15,6 +15,7 @@ import {
 import { createHistory } from './history'
 import { activeTab, currentSite, loading } from './nav'
 import { createSelection } from './selection'
+import { uniqueBy } from './unique'
 import type { View } from './view-types'
 
 export type { ArcaTab, HomeTab, View } from './view-types'
@@ -180,8 +181,10 @@ export async function showView(
     if (mine !== seq) return
 
     if (v.kind === 'package') {
-      const pkg = await openPackage(v.site, v.id)
+      const loaded = await openPackage(v.site, v.id)
       if (mine !== seq) return
+      // 그리드가 sort 로 키를 잡으므로 겹치는 sort 는 처음 것만 둔다.
+      const pkg = { ...loaded, items: uniqueBy(loaded.items, (i) => i.sort) }
       let sub = `${pkg.items.length}개`
       if (pkg.seller) sub += ` · ${pkg.seller}`
       selection.setAll(
@@ -206,20 +209,22 @@ export async function showView(
               ? await listArca(v.tab, v.page)
               : await search(v.site, v.word, v.type, v.page)
       if (mine !== seq) return
+      // 그리드가 idx 로 키를 잡으므로 겹치는 패키지는 처음 것만 둔다.
+      const rows = uniqueBy(res.items, (b) => b.idx)
       viewState.update((s) => ({
         ...s,
         gen,
         paged: v.kind === 'all' || v.kind === 'arca' || v.kind === 'search',
-        rows: res.items,
+        rows,
         page: res.page,
         pages: Math.max(res.pages, res.page),
         resultText:
           v.kind === 'all' && res.total
             ? `전체 ${res.total.toLocaleString('en-US')}개 패키지`
-            : res.items.length
-              ? `${res.items.length}개 패키지`
+            : rows.length
+              ? `${rows.length}개 패키지`
               : '',
-        notice: res.items.length ? null : emptyMessage(v),
+        notice: rows.length ? null : emptyMessage(v),
       }))
     }
     await tick()
