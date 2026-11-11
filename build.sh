@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 디시콘 다운로더 macOS 빌드 스크립트
 #
-#   ./build.sh            -> dist/디시콘 다운로더.app, dist/dccon-downloader-<버전>-macos.zip
+#   ./build.sh            -> dist/디시콘 다운로더.app (유니버설), dist/dccon-downloader-<버전>-macos.zip
 #   ./build.sh --clean    이전 빌드 산출물(dist/, ui/dist/) 먼저 정리
 
 set -euo pipefail
@@ -28,10 +28,14 @@ TARGET_DIR=$(cargo metadata --no-deps --format-version 1 \
 echo "프론트엔드 의존성 설치..."
 npm --prefix ui ci
 
-echo "앱 빌드 (v$VERSION, macOS .app)..."
-cargo tauri build --bundles app
+echo "앱 빌드 (v$VERSION, macOS 유니버설 .app: Apple Silicon + Intel)..."
+# 두 아키텍처를 한 .app 에 담는다 (Intel 맥에서도 뜨게). 두 타깃이 깔려 있어야 한다.
+if command -v rustup >/dev/null; then
+    rustup target add aarch64-apple-darwin x86_64-apple-darwin
+fi
+cargo tauri build --target universal-apple-darwin --bundles app
 
-SRC=$(ls -d "$TARGET_DIR"/release/bundle/macos/*.app | head -n 1)
+SRC=$(ls -d "$TARGET_DIR"/universal-apple-darwin/release/bundle/macos/*.app | head -n 1)
 APP="dist/디시콘 다운로더.app"
 mkdir -p dist
 rm -rf "$APP"

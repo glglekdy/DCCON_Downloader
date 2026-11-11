@@ -17,6 +17,9 @@ jobs:
           node-version: lts/*
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          # 유니버설(.app 하나에 Apple Silicon + Intel) 빌드용.
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: tauri-cli 설치
         run: cargo install tauri-cli --version "^2" --locked
