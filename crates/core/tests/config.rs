@@ -8,8 +8,10 @@ fn golden(name: &str) -> PathBuf {
 #[test]
 fn settings_default_matches_python() {
     let loaded = Settings::load(&golden("settings_default.json"));
-    let mut expected = Settings::default();
-    expected.download_dir = loaded.download_dir.clone();
+    let expected = Settings {
+        download_dir: loaded.download_dir.clone(),
+        ..Default::default()
+    };
     assert_eq!(loaded, expected);
     assert_eq!(loaded.concurrency, 3);
     assert_eq!(loaded.theme, "system");
@@ -19,8 +21,10 @@ fn settings_default_matches_python() {
 fn settings_roundtrip_format() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("sub").join("settings.json");
-    let mut s = Settings::default();
-    s.theme = "테마".into();
+    let s = Settings {
+        theme: "테마".into(),
+        ..Default::default()
+    };
     s.save(&path).unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("\"테마\""));
