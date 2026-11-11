@@ -20,8 +20,6 @@ use crate::models::{Brief, Item, Package};
 
 pub const ARCA_BASE: &str = "https://arca.live";
 pub const LOGIN_URL: &str = "https://arca.live/u/login?goto=/e/";
-pub const ARCA_TABS: [(&str, &str); 3] =
-    [("new", "최신"), ("weekly", "주간 인기"), ("monthly", "월간 인기")];
 pub const SEARCH_TYPES: [(&str, &str); 3] = [("title", "제목"), ("nickname", "작가"), ("tag", "태그")];
 
 fn re(p: &str) -> Regex {
@@ -139,9 +137,9 @@ pub fn parse_package(id: u64, body: &str) -> Package {
             .split('?')
             .next()
             .and_then(|u| u.rsplit('.').next())
-            .unwrap_or("")
-            .to_lowercase();
-        let ext = if ext.is_empty() { "png".to_string() } else { ext };
+            .unwrap_or("");
+        // 주소 끝이 `.jpg/x` 처럼 이상하면 1.3.0 의 기본값 png (동영상은 아래에서 mp4).
+        let ext = crate::naming::safe_ext(ext, "png");
         let poster = attrs.get("poster").copied().unwrap_or("");
         items.push(Item {
             idx: attrs.get("data-id").and_then(|s| s.parse().ok()).unwrap_or(0),

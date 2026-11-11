@@ -38,8 +38,7 @@ impl ImageCache {
     }
 
     fn path_for_key(&self, key: &str, ext: &str) -> PathBuf {
-        let ext = ext.to_lowercase();
-        let ext = ext.trim_start_matches('.');
+        let ext = crate::naming::safe_ext(ext, "png");
         self.root.join(&key[..2]).join(format!("{key}.{ext}"))
     }
 

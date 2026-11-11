@@ -68,8 +68,19 @@ pub fn item_filename(sort: u32, title: &str, ext: &str, width: usize) -> String 
     if safe.chars().count() > MAX_COMPONENT {
         safe = rstrip_dot_space(truncate_chars(&safe)).to_string();
     }
-    let ext = if ext.is_empty() { "png" } else { ext };
+    let ext = safe_ext(ext, "png");
+    format!("{sort:0width$}_{safe}.{ext}")
+}
+
+/// 파일 경로에 들어갈 확장자. 1.3.0 처럼 소문자로 바꾸고 앞의 `.` 을 뗀다.
+/// 영숫자 1~5자(img:// 의 `e` 와 같은 규칙)가 아니면 `fallback` 을 쓴다.
+/// 서버가 준 값이 `png/../../x` 같아도 저장 폴더나 캐시 밖으로 나가지 않게 한다.
+pub fn safe_ext(ext: &str, fallback: &str) -> String {
     let ext = ext.to_lowercase();
     let ext = ext.trim_start_matches('.');
-    format!("{sort:0width$}_{safe}.{ext}")
+    if (1..=5).contains(&ext.len()) && ext.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        ext.to_string()
+    } else {
+        fallback.to_string()
+    }
 }

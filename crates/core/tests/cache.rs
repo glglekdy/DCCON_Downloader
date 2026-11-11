@@ -98,3 +98,15 @@ fn stats_and_clear() {
     assert!(!img.exists());
     assert!(!meta.exists());
 }
+
+#[test]
+fn bad_ext_stays_inside_cache() {
+    let dir = tempfile::tempdir().unwrap();
+    let c = ImageCache::new(dir.path().to_path_buf());
+    let url = "https://dcimg5.dcinside.com/dccon.php?no=abc";
+    let key = cache_key(url);
+    assert_eq!(
+        c.path_for(url, "png/../../x"),
+        dir.path().join(&key[..2]).join(format!("{key}.png"))
+    );
+}

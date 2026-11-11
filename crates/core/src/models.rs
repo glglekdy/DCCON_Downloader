@@ -54,10 +54,7 @@ impl Item {
     }
 
     fn from_api(row: &Value) -> Item {
-        let ext = match str_of(row.get("ext")) {
-            "" => "png".to_string(),
-            e => e.to_lowercase().trim_start_matches('.').to_string(),
-        };
+        let ext = crate::naming::safe_ext(str_of(row.get("ext")), "png");
         Item {
             idx: int_of(row.get("idx")),
             title: str_of(row.get("title")).trim().to_string(),
