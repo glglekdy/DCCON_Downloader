@@ -13,6 +13,7 @@ use crate::{Error, Result};
 pub const MIGRATION_MARKER: &str = "MIGRATED.txt";
 pub const LOCAL_NAME: &str = "디시콘 다운로더.exe";
 const ERROR_LOG: &str = "last_error.log";
+const ARCA_PROFILE_DIR: &str = "arca_browser";
 
 fn old_path(current: &Path) -> PathBuf {
     let mut name: OsString = current.file_name().unwrap_or_default().to_os_string();
@@ -69,6 +70,8 @@ pub fn cleanup_after_start(exe: &Path, paths: &crate::config::Paths) -> Option<S
     }
 
     let _ = fs::remove_dir_all(&paths.code);
+    // 1.3.0 의 크롬 로그인 프로필(ARCA_PROFILE_DIR). 2.0 은 쓰지 않는다.
+    let _ = fs::remove_dir_all(paths.data.join(ARCA_PROFILE_DIR));
 
     let mut log = None;
     if let Ok(rd) = fs::read_dir(&paths.update) {

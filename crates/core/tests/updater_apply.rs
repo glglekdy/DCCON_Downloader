@@ -47,7 +47,11 @@ fn cleanup_removes_migration_leftovers() {
     write(&p.code.join("1.2.5/dccon/a.py"), b"c");
     write(&p.update.join("v1/x.zip"), b"z");
     write(&p.update.join("apply_update.ps1"), b"s");
+    write(&p.data.join("arca_browser/Default/Cookies"), b"c");
+    write(&p.settings, b"{}");
     assert_eq!(cleanup_after_start(&exe, &p), None);
+    assert!(!p.data.join("arca_browser").exists());
+    assert!(p.settings.exists());
     assert!(!d.path().join("app/dccon-downloader.exe.old").exists());
     assert!(!d.path().join("app/_internal").exists());
     assert!(!p.code.exists());
