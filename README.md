@@ -59,6 +59,7 @@ D:/dccon/
 그리고 캐시 용량 확인과 비우기를 할 수 있다.
 
 `GIF 미리보기 움직이기`(기본 켬)를 끄면 움직이는 디시콘도 첫 장면에서 멈춰 보인다.
+`움직임 줄이기`를 켜면 앱의 애니메이션(전환·진행 막대·테두리 빛)을 끈다.
 
 `테마`는 `시스템 설정 따르기`(기본) · `라이트` · `다크` 중에서 고른다. 시스템을 따르면
 윈도우나 맥에서 라이트/다크를 바꾸는 순간 앱도 같이 바뀐다. 색은 `ui/src/lib/theme.css`에 토큰으로
@@ -86,19 +87,23 @@ crates/core/            dccon-core
   src/config.rs         DATA_DIR 등 경로, Settings
   src/updater/          릴리즈 확인·받기·검증(mod.rs), exe 교체·이전 흔적 정리(apply.rs)
   src/error.rs          Error
+  src/lib.rs            모듈 목록
   tests/fixtures/       실측 응답
   tests/golden/         1.3.0 파이썬 구현이 한 번 뽑아 둔 기준값(데이터. 다시 만들지 않는다)
 src-tauri/              앱 크레이트 (얇게)
   src/main.rs           진입
   src/startup.rs        시작 처리 (WebView2 확인, 이전 흔적 정리, 창 준비)
-  src/state.rs          AppState (설정, 클라이언트, 캐시, 세마포어, 화면 세대, 큐)
+  src/state.rs          AppState (설정, 클라이언트, 캐시, 세마포어(nav, thumb), 화면 세대, 큐)
   src/commands.rs       프론트가 부르는 커맨드
   src/app_commands.rs   커맨드 목록 (ACL 과 맞춰 둔다)
   src/dto.rs            프론트와 주고받는 타입
   src/imgproto.rs       img:// 프로토콜
-  src/queue.rs          다운로드 큐와 이벤트
+  src/queue.rs          다운로드 큐와 이벤트 (download 세마포어는 실행마다 여기서 만든다)
   src/login.rs          아카콘 로그인 창
   src/acl_tests.rs      커맨드 권한 파일 점검
+  capabilities/         창별 권한 (main 창에만 앱 커맨드)
+  permissions/          커맨드 권한 정의 (빌드가 만든다)
+  icons/                앱 아이콘
   tauri.conf.json
 ui/                     Svelte 앱
   src/lib/theme.css     라이트/다크 토큰
@@ -108,7 +113,7 @@ ui/                     Svelte 앱
 
 ### 엔드포인트
 
-실측으로 확인한 것들. 셋 다 로그인이 필요 없다.
+실측으로 확인한 것들. 디시콘 쪽은 모두 로그인이 필요 없다.
 
 | 용도 | 요청 |
 | --- | --- |
@@ -116,7 +121,17 @@ ui/                     Svelte 앱
 | 검색 | `GET /hot/{page}/{title\|nick_name\|tags}/{검색어}` — 서버 렌더 HTML |
 | 전체 목록 | `GET /new/{page}` — 서버 렌더 HTML, 최신순 15개. 마지막 페이지는 `page_end` 링크 |
 | 인기 목록 | `json2.dcinside.com/json1/dccon_{day,week,month}_top100.php` — JSON이 `(...)`로 감싸여 있음 |
+| 공식 목록 | `json2.dcinside.com/json1/dccon_official.php` — 인기 목록과 같은 형식 |
 | 이미지 | `dcimg5.dcinside.com/dccon.php?no={path}` |
+
+아카콘(arca.live)은 서버 렌더 HTML 을 읽는다. 화면에 따라 로그인 세션이 필요하다.
+
+| 용도 | 요청 |
+| --- | --- |
+| 목록 | `GET https://arca.live/e/?p={page}` (인기는 `&rank=weekly\|monthly`) |
+| 검색 | `GET https://arca.live/e/?target={title\|nickname\|tag}&keyword={검색어}&p={page}` |
+| 상세 | `GET https://arca.live/e/{id}` |
+| 로그인 | `https://arca.live/u/login?goto=/e/` 를 앱 안 로그인 창으로 연다 |
 
 **이미지 CDN은 `Referer: https://dccon.dcinside.com/` 가 없으면 403**을 준다. 이게 대부분의
 디시콘 다운로더가 실패하는 지점이다.
@@ -143,7 +158,7 @@ ui/                     Svelte 앱
 ./build.ps1              # -> dist/dccon-downloader.exe (단일 exe)
 ./build.ps1 -Clean       # 이전 산출물 정리 후 빌드
 ./build.ps1 -Console     # 콘솔 창이 붙은 빌드 (오류 확인용)
-./build.ps1 -Release     # dist/release/ 에 릴리즈 자산 둘
+./build.ps1 -Release     # dist/release/ 에 윈도우 릴리즈 자산 둘 (맥 zip 은 build.sh 로 따로)
 ```
 
 `2>&1` 은 붙이지 않는다(cargo/npm 의 진행 메시지가 stderr 로 나온다).
@@ -164,6 +179,10 @@ Windows 11 / AMD Ryzen 9 7900 / 램 31 GB 에서 실측한 값:
 ```bash
 ./build.sh --clean    # -> dist/디시콘 다운로더.app
 ```
+
+Apple Silicon 과 Intel 맥에서 모두 뜨도록 유니버설 앱(`--target universal-apple-darwin`)으로 만든다.
+`rustup target add aarch64-apple-darwin x86_64-apple-darwin` 이 필요하다(`build.sh` 가 rustup 이 있으면 알아서 한다).
+결과는 `target/universal-apple-darwin/release/bundle/macos/` 에 생기고 `build.sh` 가 `dist/` 로 옮긴다.
 
 배포할 때는 이름에 `macos` 를 넣어 묶는다. 윈도우 앱의 자동 업데이트가 이 zip 을 집어가지 않게 하려는 것이다.
 맥 빌드는 GitHub Actions(`.github/workflows/macos.yml`)에서도 돌릴 수 있다.
@@ -206,11 +225,17 @@ Rust 앱은 처음 뜰 때 `MIGRATED.txt` 하나만 든 `_internal` 과 옛 `cod
 옮기다 실패하면 `.old` 를 되돌리고 이유를 보여준다. 쓰기 권한이 없거나 맥이거나
 `cargo tauri dev` 로 실행 중이면 자동 교체 대신 릴리즈 페이지를 연다.
 
+윈도우에서 릴리즈 페이지로 받은 `dccon-downloader-X.Y.Z(-win64).exe` 를 실행하면, 처음 뜰 때 자기 이름을
+`디시콘 다운로더.exe` 로 바꾸고 같은 폴더의 더 낮은 버전 exe(`dccon-downloader-*.exe`, 낡은
+`디시콘 다운로더.exe`)를 휴지통으로 보낸다. 그래서 받은 파일이 폴더에서 사라진 것처럼 보일 수 있다.
+
 ### 데이터
 
 설정·캐시·세션은 1.3.0 과 같은 자리(`%LOCALAPPDATA%/DcconDownloader/`, 맥은
 `~/Library/Application Support/DcconDownloader/`)와 형식을 쓴다. 그래서 업데이트해도 설정과 캐시가
-그대로 이어진다. WebView2 데이터는 같은 폴더의 `webview/` 에 쌓인다.
+그대로 이어진다. WebView2 데이터는 같은 폴더의 `webview/` 에, 하루 단위 로그는 `logs/` 에
+(최근 3개만) 쌓인다. 1.3.0 이 아카콘 로그인에 쓰던 크롬 프로필 `arca_browser/` 는 2.0 이 쓰지 않으므로
+윈도우 앱이 처음 뜰 때 지운다.
 
 ## 참고
 
