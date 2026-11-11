@@ -358,7 +358,8 @@
   /* 알림은 그리드를 밀지 않고 위에 얹는다. */
   .toast {
     position: absolute;
-    top: 0;
+    /* 그림자 위쪽이 .stage 의 overflow 에 잘리지 않게 띄운다. */
+    top: 6px;
     left: 28px;
     right: 28px;
     z-index: 3;

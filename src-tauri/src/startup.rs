@@ -59,6 +59,9 @@ pub fn cleanup(paths: &Paths) -> (Option<String>, Option<PathBuf>) {
     }
     // `.old` 는 지난 업데이트가 이 실행을 띄운 이름(= 이름을 바꾸기 전 경로) 옆에 있다.
     retry_remove_old(&exe);
+    // 1.3.0 의 크롬 프로필은 클 수 있어 창을 늦추지 않게 뒤에서 지운다.
+    let legacy = paths.clone();
+    std::thread::spawn(move || apply::remove_legacy_arca_profile(&legacy));
     let (exe, removed) = apply::tidy_sibling_builds(
         &exe,
         env!("CARGO_PKG_VERSION"),

@@ -70,8 +70,6 @@ pub fn cleanup_after_start(exe: &Path, paths: &crate::config::Paths) -> Option<S
     }
 
     let _ = fs::remove_dir_all(&paths.code);
-    // 1.3.0 의 크롬 로그인 프로필(ARCA_PROFILE_DIR). 2.0 은 쓰지 않는다.
-    let _ = fs::remove_dir_all(paths.data.join(ARCA_PROFILE_DIR));
 
     let mut log = None;
     if let Ok(rd) = fs::read_dir(&paths.update) {
@@ -96,6 +94,12 @@ pub fn cleanup_after_start(exe: &Path, paths: &crate::config::Paths) -> Option<S
         }
     }
     log
+}
+
+/// 1.3.0 의 크롬 로그인 프로필(`arca_browser/`)을 지운다. 2.0 은 쓰지 않는다.
+/// 수백 MB 일 수 있어 창을 늦추지 않도록 백그라운드에서 부른다.
+pub fn remove_legacy_arca_profile(paths: &crate::config::Paths) {
+    let _ = fs::remove_dir_all(paths.data.join(ARCA_PROFILE_DIR));
 }
 
 fn named_version(name: &str) -> Option<String> {

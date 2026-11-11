@@ -2,7 +2,9 @@ use std::fs;
 use std::path::Path;
 
 use dccon_core::config::Paths;
-use dccon_core::updater::apply::{apply, cleanup_after_start, tidy_sibling_builds};
+use dccon_core::updater::apply::{
+    apply, cleanup_after_start, remove_legacy_arca_profile, tidy_sibling_builds,
+};
 
 fn write(p: &Path, c: &[u8]) {
     fs::create_dir_all(p.parent().unwrap()).unwrap();
@@ -50,6 +52,9 @@ fn cleanup_removes_migration_leftovers() {
     write(&p.data.join("arca_browser/Default/Cookies"), b"c");
     write(&p.settings, b"{}");
     assert_eq!(cleanup_after_start(&exe, &p), None);
+    // 크롬 프로필은 시작을 늦추지 않도록 따로 지운다.
+    assert!(p.data.join("arca_browser").exists());
+    remove_legacy_arca_profile(&p);
     assert!(!p.data.join("arca_browser").exists());
     assert!(p.settings.exists());
     assert!(!d.path().join("app/dccon-downloader.exe.old").exists());
