@@ -9,7 +9,6 @@
     "core:default",
     "core:window:allow-set-theme",
     "dialog:default",
-    "opener:default",
     "allow-get-settings",
     "allow-save-settings",
     "allow-begin-view",
