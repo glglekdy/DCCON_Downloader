@@ -132,7 +132,8 @@ pub fn parse_input(site: Site, text: String) -> Result<Query, CmdError> {
     })
 }
 
-#[tauri::command]
+/// 저장 폴더를 만드는 일이 네트워크 드라이브에서 오래 걸릴 수 있어 UI 스레드 밖에서 돈다.
+#[tauri::command(async)]
 pub fn enqueue(app: AppHandle, state: St<'_>, site: Site, jobs: Vec<Job>) -> Result<(), CmdError> {
     let shared = state.inner().clone();
     state.queue.start(app, shared, site, jobs)
@@ -150,7 +151,8 @@ pub fn cancel_queue(state: St<'_>) -> Result<(), CmdError> {
     Ok(())
 }
 
-#[tauri::command]
+/// 폴더 만들기·열기는 UI 스레드 밖에서 한다 (연결이 끊긴 드라이브에서 창이 멈추지 않게).
+#[tauri::command(async)]
 pub fn open_folder(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
     let dir = state.settings.read().unwrap().download_dir.clone();
     std::fs::create_dir_all(&dir)

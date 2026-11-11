@@ -135,7 +135,10 @@ impl Queue {
         resume_clients(state);
     }
 
-    fn finish(&self) {
+    /// 실행을 끝낸다. `announce`(queue-finished 알림)를 자리를 비우기 **전에** 불러서,
+    /// 바로 이어 시작한 다음 실행의 queue-started 가 이 실행의 queue-finished 보다 먼저 가지 않게 한다.
+    fn finish(&self, announce: impl FnOnce()) {
+        announce();
         *self.active.lock().unwrap() = None;
     }
 }
@@ -224,8 +227,9 @@ async fn run(
     }
     // 일시정지한 채 끝나도 이후 탐색이 멈추지 않게 한다.
     resume_clients(&state);
-    state.queue.finish();
-    let _ = app.emit("queue-finished", total);
+    state.queue.finish(|| {
+        let _ = app.emit("queue-finished", total);
+    });
 }
 
 async fn run_job(
@@ -327,6 +331,17 @@ mod tests {
         assert!(state.dccon.is_paused() && state.arca.is_paused());
         state.queue.cancel(&state);
         assert!(!state.dccon.is_paused() && !state.arca.is_paused());
+    }
+
+    #[test]
+    fn finish_announces_before_accepting_next_run() {
+        let q = Queue::default();
+        *q.active.lock().unwrap() = Some(CancellationToken::new());
+        let mut busy_while_announcing = None;
+        q.finish(|| busy_while_announcing = Some(q.active.lock().unwrap().is_some()));
+        // 알리는 동안에는 아직 실행 중이라 새 enqueue 는 busy 로 거절된다.
+        assert_eq!(busy_while_announcing, Some(true));
+        assert!(q.active.lock().unwrap().is_none());
     }
 
     #[test]
