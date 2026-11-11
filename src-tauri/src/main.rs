@@ -24,9 +24,12 @@ fn main() {
     if !startup::ensure_webview2() {
         return;
     }
-    let failure = startup::cleanup(&paths);
+    let (failure, exe) = startup::cleanup(&paths);
     let state = Arc::new(state::AppState::new(paths));
     *state.last_error.lock().unwrap() = failure;
+    if let Some(exe) = exe {
+        let _ = state.exe_path.set(exe);
+    }
     // 1.3.0 이 남긴 것을 포함해 저장해 둔 아카라이브 세션을 화면이 뜨기 전에 붙인다.
     login::apply_saved(&state);
     tauri::Builder::default()

@@ -44,18 +44,22 @@ pub fn init_logging(paths: &Paths) {
     tracing::info!("시작 {}", env!("CARGO_PKG_VERSION"));
 }
 
-/// 윈도우 릴리즈 실행에서만 이전 흔적을 치우고, 남은 업데이트 실패 사유를 돌려준다.
-pub fn cleanup(paths: &Paths) -> Option<String> {
+/// 윈도우 릴리즈 실행에서만 이전 흔적을 치운다.
+/// (남은 업데이트 실패 사유, 정리 뒤 exe 경로). exe 경로는 `AppState::exe_path` 에 넣는다.
+pub fn cleanup(paths: &Paths) -> (Option<String>, Option<PathBuf>) {
     if !(cfg!(windows) && !cfg!(debug_assertions)) {
-        return None;
+        return (None, None);
     }
-    let exe = std::env::current_exe().ok()?;
+    let Ok(exe) = std::env::current_exe() else {
+        return (None, None);
+    };
     let failure = apply::cleanup_after_start(&exe, paths);
     if failure.is_some() {
         tracing::info!("지난 업데이트 실패 사유를 읽었다");
     }
+    // `.old` 는 지난 업데이트가 이 실행을 띄운 이름(= 이름을 바꾸기 전 경로) 옆에 있다.
     retry_remove_old(&exe);
-    let (_, removed) = apply::tidy_sibling_builds(
+    let (exe, removed) = apply::tidy_sibling_builds(
         &exe,
         env!("CARGO_PKG_VERSION"),
         &|p| apply::exe_file_version(p),
@@ -64,7 +68,7 @@ pub fn cleanup(paths: &Paths) -> Option<String> {
     if !removed.is_empty() {
         tracing::info!("이전 빌드 정리: {}", removed.join(", "));
     }
-    failure
+    (failure, Some(exe))
 }
 
 /// 옛 프로세스가 아직 끝나는 중이면 `<exe>.old` 가 안 지워진다. 백그라운드에서 몇 초 더 시도한다.

@@ -371,7 +371,9 @@ pub fn apply_update(app: AppHandle, state: St<'_>) -> Result<(), CmdError> {
         .downloaded
         .clone()
         .ok_or_else(|| update_err("받아 둔 업데이트가 없습니다."))?;
-    let current = std::env::current_exe()
+    // 시작할 때 이름을 바꿨으면 그 경로. `current_exe()` 는 바꾸기 전 이름을 돌려준다.
+    let current = state
+        .running_exe()
         .map_err(|e| update_err(format!("실행 파일 위치를 알 수 없습니다. ({e})")))?;
     tracing::info!("업데이트 적용 시작");
     if let Err(e) = updater::apply::apply(&downloaded, &current) {

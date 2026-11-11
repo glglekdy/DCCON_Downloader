@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use dccon_core::cache::{ImageCache, MetaCache};
 use dccon_core::config::{Paths, Settings};
@@ -42,6 +42,9 @@ pub struct AppState {
     pub last_error: Mutex<Option<String>>,
     /// 아카콘 클라이언트에 로그인 세션이 붙어 있나 (`login::has_session`).
     pub arca_logged_in: AtomicBool,
+    /// 시작 정리(`tidy_sibling_builds`)가 exe 이름을 바꿨으면 바뀐 경로. 윈도우는 실행 중에
+    /// 이름이 바뀌어도 `current_exe()` 가 옛 경로를 돌려주므로 업데이트 적용은 이 값을 먼저 쓴다.
+    pub exe_path: OnceLock<PathBuf>,
 }
 
 fn thumb_permits(n: u32) -> usize {
@@ -65,6 +68,7 @@ impl AppState {
             update: Mutex::new(UpdateSlot::default()),
             last_error: Mutex::new(None),
             arca_logged_in: AtomicBool::new(false),
+            exe_path: OnceLock::new(),
             paths,
         }
     }
@@ -108,5 +112,50 @@ impl AppState {
             }
             Site::Arca => arca::fetch_package(&self.arca, id, cancel).await,
         }
+    }
+}
+
+/// 업데이트를 적용·재시작할 exe 경로: 시작 정리가 남긴 경로가 있으면 그것, 없으면 `fallback`.
+fn exe_path_or(
+    stored: Option<&PathBuf>,
+    fallback: impl FnOnce() -> std::io::Result<PathBuf>,
+) -> std::io::Result<PathBuf> {
+    match stored {
+        Some(p) => Ok(p.clone()),
+        None => fallback(),
+    }
+}
+
+impl AppState {
+    /// 지금 실행 중인 exe 의 실제 경로 (`exe_path` 우선, 없으면 `current_exe()`).
+    pub fn running_exe(&self) -> std::io::Result<PathBuf> {
+        exe_path_or(self.exe_path.get(), std::env::current_exe)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exe_path_prefers_renamed_path() {
+        let renamed = PathBuf::from(r"C:\apps\디시콘 다운로더.exe");
+        let got = exe_path_or(Some(&renamed), || panic!("current_exe 를 부르면 안 된다"));
+        assert_eq!(got.unwrap(), renamed);
+        let stale = PathBuf::from(r"C:\apps\dccon-downloader-2.0.0.exe");
+        assert_eq!(exe_path_or(None, || Ok(stale.clone())).unwrap(), stale);
+    }
+
+    #[test]
+    fn state_exe_path_uses_stored_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::new(Paths::new(dir.path().to_path_buf()));
+        assert_eq!(
+            state.running_exe().unwrap(),
+            std::env::current_exe().unwrap()
+        );
+        let renamed = dir.path().join("디시콘 다운로더.exe");
+        state.exe_path.set(renamed.clone()).unwrap();
+        assert_eq!(state.running_exe().unwrap(), renamed);
     }
 }
