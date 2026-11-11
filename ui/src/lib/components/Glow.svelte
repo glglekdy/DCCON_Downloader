@@ -1,9 +1,10 @@
 <script lang="ts">
-  let { active = false }: { active?: boolean } = $props()
+  /** offset: 독을 숨기며 내려간 거리. 빛도 독 밑에 깔린 채로 같이 내려간다. */
+  let { active = false, offset = 0 }: { active?: boolean; offset?: number } = $props()
 </script>
 
 <!-- 받는 동안 바닥에서 번지는 빛 (glow.py). 켜질 때 420ms, 꺼질 때 520ms, 켜진 뒤엔 2.6초 주기로 숨쉰다. -->
-<div class="glow" class:active aria-hidden="true">
+<div class="glow" class:active aria-hidden="true" style:transform="translateY({offset}px)">
   <div class="pulse"></div>
 </div>
 
@@ -17,11 +18,16 @@
     height: 260px;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 520ms cubic-bezier(0.215, 0.61, 0.355, 1);
+    /* 독과 같은 곡선·시간으로 움직인다 (Dock .space). */
+    transition:
+      opacity 520ms cubic-bezier(0.215, 0.61, 0.355, 1),
+      transform 260ms cubic-bezier(0.215, 0.61, 0.355, 1);
   }
   .glow.active {
     opacity: 1;
-    transition-duration: 420ms;
+    transition:
+      opacity 420ms cubic-bezier(0.215, 0.61, 0.355, 1),
+      transform 260ms cubic-bezier(0.215, 0.61, 0.355, 1);
   }
   .pulse {
     position: absolute;

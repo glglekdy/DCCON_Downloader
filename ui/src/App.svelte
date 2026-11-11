@@ -51,6 +51,7 @@
   let content: HTMLDivElement | undefined = $state()
   /** 독이 지금 차지하는 높이. 그리드 아래에 이만큼 비워 둔다. */
   let dockPad = $state(0)
+  let dockOffset = $state(0)
   let searchBar: ReturnType<typeof SearchBar> | undefined = $state()
 
   let settingsOpen = $state(false)
@@ -301,8 +302,8 @@
         {/if}
         <div class="dock-pad" style:height="{dockPad}px"></div>
       </div>
-      <Glow active={$queue.running && !$queue.cancelling} />
-      <Dock bind:pad={dockPad} />
+      <Glow active={$queue.running && !$queue.cancelling} offset={dockOffset} />
+      <Dock bind:pad={dockPad} bind:offset={dockOffset} />
       {#if $notice}
         <div class="toast" role="status">
           <span>{$notice}</span>
@@ -344,6 +345,8 @@
     position: relative;
     flex: 1;
     min-height: 0;
+    /* 숨긴 독과 그 밑의 빛이 창 아래로 삐져나오지 않게 자른다. */
+    overflow: hidden;
   }
   .content {
     height: 100%;

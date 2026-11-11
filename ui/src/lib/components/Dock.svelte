@@ -4,7 +4,9 @@
   import QueueBar from './QueueBar.svelte'
 
   /** 지금 독이 차지하는 높이(접히면 손잡이만). 그리드 아래 여백에 쓴다. */
-  let { pad = $bindable(0) }: { pad?: number } = $props()
+  /** offset: 숨기면서 아래로 내려간 거리. 그라데이션이 같이 내려가는 데 쓴다. */
+  let { pad = $bindable(0), offset = $bindable(0) }: { pad?: number; offset?: number } =
+    $props()
 
   /** 손잡이만 남았을 때 보이는 높이: 위 여백 8 + 손잡이 20 + 아래 12 (main_window._place_dock). */
   const HANDLE_BLOCK = 40
@@ -23,6 +25,7 @@
 
   $effect(() => {
     pad = full - shift
+    offset = shift
   })
 </script>
 
