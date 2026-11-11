@@ -13,7 +13,6 @@ pub mod apply;
 
 use crate::{Error, Result};
 
-pub const REPO: &str = "glglekdy/DCCON_Downloader";
 pub const LATEST_URL: &str = "https://api.github.com/repos/glglekdy/DCCON_Downloader/releases/latest";
 pub const RELEASES_PAGE: &str = "https://github.com/glglekdy/DCCON_Downloader/releases";
 
@@ -103,10 +102,6 @@ pub fn pick_asset(r: &Release) -> Option<&Asset> {
         .collect();
     matches.sort_by_key(|a| !a.name.to_lowercase().contains("win"));
     matches.into_iter().next()
-}
-
-pub fn release_name(version: &str) -> String {
-    format!("dccon-downloader-{version}.exe")
 }
 
 // ---------------------------------------------------------------- HTTP

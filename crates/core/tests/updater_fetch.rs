@@ -52,7 +52,6 @@ fn pick_asset_cases() {
     assert!(pick_asset(&r).is_none());
     let r = release(&["other.exe", "dccon-win.exe"]);
     assert_eq!(pick_asset(&r).unwrap().name, "dccon-win.exe");
-    assert_eq!(release_name("2.0.0"), "dccon-downloader-2.0.0.exe");
 }
 
 #[tokio::test]
