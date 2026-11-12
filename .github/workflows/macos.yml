@@ -1,10 +1,12 @@
 name: macOS 빌드
 
-# 수동 실행. macOS 러너에서 .app 을 만들어 zip 을 아티팩트로 올린다.
+# 수동 실행 또는 main 으로 가는 PR. macOS 러너에서 .app 을 만들어 zip 을 아티팩트로 올린다.
 # 릴리즈할 때는 이 아티팩트를 받아 dccon-downloader-X.Y.Z-macos.zip 자산으로 올린다.
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
 
 jobs:
   build:
