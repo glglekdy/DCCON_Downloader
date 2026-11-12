@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-arca"
+description = "Enables the list_arca command without any pre-configured scope."
+commands.allow = ["list_arca"]
+
+[[permission]]
+identifier = "deny-list-arca"
+description = "Denies the list_arca command without any pre-configured scope."
+commands.deny = ["list_arca"]

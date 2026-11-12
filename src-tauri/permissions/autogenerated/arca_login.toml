@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-arca-login"
+description = "Enables the arca_login command without any pre-configured scope."
+commands.allow = ["arca_login"]
+
+[[permission]]
+identifier = "deny-arca-login"
+description = "Denies the arca_login command without any pre-configured scope."
+commands.deny = ["arca_login"]

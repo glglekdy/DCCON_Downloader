@@ -1,0 +1,188 @@
+// Rust 커맨드 래퍼. 자료형은 src-tauri/src/dto.rs, crates/core 의 serde 출력(snake_case)과 같다.
+// Tauri 는 커맨드 인자를 camelCase 키로 받는다 (search_type -> searchType).
+import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+
+export type Site = 'dccon' | 'arca'
+export type TopKind = 'day' | 'week' | 'month' | 'official'
+export type ThemeMode = 'system' | 'light' | 'dark'
+
+export interface Settings {
+  download_dir: string
+  concurrency: number
+  save_main_image: boolean
+  write_meta_json: boolean
+  reduce_motion: boolean
+  theme: ThemeMode
+  animate_gifs: boolean
+  check_updates: boolean
+  skipped_version: string
+  recent_packages: number[]
+}
+
+/** 검색 결과·인기 목록의 한 줄 (상세 전). */
+export interface Brief {
+  idx: number
+  title: string
+  seller: string
+  thumb_url: string
+}
+
+export interface Item {
+  idx: number
+  title: string
+  sort: number
+  ext: string
+  path: string
+  thumb: string
+}
+
+export interface Package {
+  idx: number
+  title: string
+  description: string
+  seller: string
+  price: string
+  reg_date: string
+  main_img_path: string
+  list_img_path: string
+  items: Item[]
+  tags: string[]
+}
+
+export interface ListPage {
+  items: Brief[]
+  page: number
+  pages: number
+  total: number | null
+}
+
+export type Query = { kind: 'search'; word: string } | { kind: 'ids'; ids: number[] }
+
+export interface Job {
+  id: number
+  title: string
+  sorts?: number[] | null
+}
+
+export interface ReleaseInfo {
+  version: string
+  notes: string
+  page_url: string
+  can_apply: boolean
+  asset_name: string | null
+}
+
+export interface CacheStats {
+  files: number
+  bytes: number
+}
+
+/** 커맨드가 실패하면 이 모양으로 던져진다. */
+export interface CmdError {
+  kind: string
+  message: string
+}
+
+export function isCmdError(e: unknown): e is CmdError {
+  return typeof e === 'object' && e !== null && 'kind' in e && 'message' in e
+}
+
+// --- 커맨드 -------------------------------------------------------------
+
+export const getSettings = () => invoke<Settings>('get_settings')
+export const saveSettings = (settings: Settings) => invoke<void>('save_settings', { settings })
+export const beginView = () => invoke<number>('begin_view')
+export const listTop = (kind: TopKind) => invoke<ListPage>('list_top', { kind })
+export const listAll = (page: number) => invoke<ListPage>('list_all', { page })
+export const listArca = (kind: string, page: number) =>
+  invoke<ListPage>('list_arca', { kind, page })
+export const search = (site: Site, word: string, searchType: string, page: number) =>
+  invoke<ListPage>('search', { site, word, searchType, page })
+export const openPackage = (site: Site, id: number) =>
+  invoke<Package>('open_package', { site, id })
+export const parseInput = (site: Site, text: string) =>
+  invoke<Query>('parse_input', { site, text })
+export const enqueue = (site: Site, jobs: Job[]) => invoke<void>('enqueue', { site, jobs })
+export const pauseQueue = (paused: boolean) => invoke<void>('pause_queue', { paused })
+export const cancelQueue = () => invoke<void>('cancel_queue')
+export const openFolder = () => invoke<void>('open_folder')
+export const cacheStats = () => invoke<CacheStats>('cache_stats')
+export const clearCache = () => invoke<void>('clear_cache')
+
+// --- 아카콘 로그인 -------------------------------------------------------
+
+/** 로그인 창이 끝나면 오는 `login-finished` 이벤트. 시도마다 한 번. */
+export interface LoginFinished {
+  /** arcaLogin() 이 돌려준 시도 번호. */
+  id: number
+  ok: boolean
+  message: string
+}
+
+/** 아카라이브 세션이 붙어 있나. */
+export const arcaStatus = () => invoke<boolean>('arca_status')
+/** 로그인 창을 띄우고 바로 시도 번호를 돌려준다. 결과는 같은 번호의 `login-finished`. */
+export const arcaLogin = () => invoke<number>('arca_login')
+/** 떠 있는 로그인 창을 닫는다. */
+export const arcaLoginCancel = () => invoke<void>('arca_login_cancel')
+/** 세션이 만료됐을 때: 세션 파일과 클라이언트 쿠키만 버린다 (로그인 창의 쿠키는 남긴다). */
+export const arcaForgetSession = () => invoke<void>('arca_forget_session')
+/** 명시적 로그아웃: 로그인 창의 아카라이브 쿠키까지 지운다. */
+export const arcaLogout = () => invoke<void>('arca_logout')
+
+// --- 이벤트 -------------------------------------------------------------
+
+export function onEvent<T>(name: string, cb: (payload: T) => void): Promise<UnlistenFn> {
+  return listen<T>(name, (e) => cb(e.payload))
+}
+
+// --- img:// -------------------------------------------------------------
+
+/** 이미지 프로토콜 주소. 윈도우의 WebView2 는 사용자 프로토콜을 `http://img.localhost/` 로 부른다. */
+export function imgUrl(url: string, ext: string, gen: number, site: Site): string {
+  ext = safeExt(ext)
+  const base = /Windows/i.test(navigator.userAgent) ? 'http://img.localhost/' : 'img://localhost/'
+  return `${base}?u=${encodeURIComponent(url)}&e=${encodeURIComponent(ext)}&g=${gen}&s=${site}`
+}
+
+const IMAGE_BASE = 'https://dcimg5.dcinside.com/dccon.php?no='
+
+/** core 의 image_url 과 같다: 전체 주소면 그대로, 디시콘의 상대 토큰이면 이미지 서버 주소를 붙인다.
+ *  Item.path, Package.main_img_path 에 쓴다. */
+export function imageUrl(path: string): string {
+  return /^https?:\/\//.test(path) ? path : IMAGE_BASE + path
+}
+
+/** 백엔드는 확장자를 ^[A-Za-z0-9]{1,5}$ 로만 받는다. 아니면 "img". */
+export function safeExt(ext: string): string {
+  return /^[A-Za-z0-9]{1,5}$/.test(ext) ? ext : 'img'
+}
+
+/** 주소 경로 끝의 확장자(1~5자 영숫자). 없으면 "img". */
+export function extFromUrl(url: string): string {
+  let path = url
+  try {
+    path = new URL(url, 'http://x/').pathname
+  } catch {
+    // 주소가 아니면 문자열 그대로 본다.
+  }
+  const m = /\.([A-Za-z0-9]{1,5})$/.exec(path)
+  return m ? m[1] : 'img'
+}
+
+// --- 업데이트 -----------------------------------------------------------
+
+export interface UpdateProgress {
+  done: number
+  total: number
+}
+
+/** 새 버전이 없거나 알릴 필요가 없으면 null. manual=false 는 설정(끄기·건너뜀)을 따른다. */
+export const checkUpdate = (manual: boolean) => invoke<ReleaseInfo | null>('check_update', { manual })
+export const downloadUpdate = () => invoke<void>('download_update')
+export const cancelUpdate = () => invoke<void>('cancel_update')
+export const applyUpdate = () => invoke<void>('apply_update')
+export const skipVersion = (version: string) => invoke<void>('skip_version', { version })
+export const openReleasePage = () => invoke<void>('open_release_page')
+export const takeLastError = () => invoke<string | null>('take_last_error')

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-arca-forget-session"
+description = "Enables the arca_forget_session command without any pre-configured scope."
+commands.allow = ["arca_forget_session"]
+
+[[permission]]
+identifier = "deny-arca-forget-session"
+description = "Denies the arca_forget_session command without any pre-configured scope."
+commands.deny = ["arca_forget_session"]

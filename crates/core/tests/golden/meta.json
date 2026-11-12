@@ -1,0 +1,97 @@
+{
+  "package_idx": 176860,
+  "title": "클오클 절망콘",
+  "description": "클오클 얼탱없는 상황들",
+  "seller": "아익",
+  "reg_date": "2026-11-09 20:54:00",
+  "tags": [
+    "coc",
+    "클오클"
+  ],
+  "items": [
+    {
+      "sort": 1,
+      "title": "홀따기",
+      "ext": "gif",
+      "file": "01_홀따기.gif"
+    },
+    {
+      "sort": 2,
+      "title": "아처퀸",
+      "ext": "gif",
+      "file": "02_아처퀸.gif"
+    },
+    {
+      "sort": 3,
+      "title": "퀸2",
+      "ext": "gif",
+      "file": "03_퀸2.gif"
+    },
+    {
+      "sort": 4,
+      "title": "벌룬",
+      "ext": "gif",
+      "file": "04_벌룬.gif"
+    },
+    {
+      "sort": 5,
+      "title": "자붐",
+      "ext": "gif",
+      "file": "05_자붐.gif"
+    },
+    {
+      "sort": 6,
+      "title": "자붐2",
+      "ext": "gif",
+      "file": "06_자붐2.gif"
+    },
+    {
+      "sort": 7,
+      "title": "없어짐",
+      "ext": "gif",
+      "file": "07_없어짐.gif"
+    },
+    {
+      "sort": 8,
+      "title": "전차",
+      "ext": "gif",
+      "file": "08_전차.gif"
+    },
+    {
+      "sort": 9,
+      "title": "대포",
+      "ext": "gif",
+      "file": "09_대포.gif"
+    },
+    {
+      "sort": 10,
+      "title": "얼음",
+      "ext": "gif",
+      "file": "10_얼음.gif"
+    },
+    {
+      "sort": 11,
+      "title": "2별",
+      "ext": "gif",
+      "file": "11_2별.gif"
+    },
+    {
+      "sort": 12,
+      "title": "무적",
+      "ext": "gif",
+      "file": "12_무적.gif"
+    },
+    {
+      "sort": 13,
+      "title": "자붐3",
+      "ext": "gif",
+      "file": "13_자붐3.gif"
+    },
+    {
+      "sort": 14,
+      "title": "팝콘",
+      "ext": "gif",
+      "file": "14_팝콘.gif"
+    }
+  ]
+}

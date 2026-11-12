@@ -1,0 +1,290 @@
+[
+  {
+    "name": "",
+    "sanitize": "untitled",
+    "dirname_idx": 7,
+    "dirname": "package_7",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_.png"
+    }
+  },
+  {
+    "name": "a/b:c?",
+    "sanitize": "a_b_c_",
+    "dirname_idx": 7,
+    "dirname": "a_b_c_",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_a_b_c_.png"
+    }
+  },
+  {
+    "name": "CON",
+    "sanitize": "_CON",
+    "dirname_idx": 7,
+    "dirname": "_CON",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_CON.png"
+    }
+  },
+  {
+    "name": "con",
+    "sanitize": "_con",
+    "dirname_idx": 7,
+    "dirname": "_con",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_con.png"
+    }
+  },
+  {
+    "name": "  hello   world  ",
+    "sanitize": "hello world",
+    "dirname_idx": 7,
+    "dirname": "hello world",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_hello world.png"
+    }
+  },
+  {
+    "name": "끝점...",
+    "sanitize": "끝점",
+    "dirname_idx": 7,
+    "dirname": "끝점",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_끝점.png"
+    }
+  },
+  {
+    "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "sanitize": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "dirname_idx": 7,
+    "dirname": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.png"
+    }
+  },
+  {
+    "name": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+    "sanitize": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+    "dirname_idx": 7,
+    "dirname": "가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가.png"
+    }
+  },
+  {
+    "name": "😀콘",
+    "sanitize": "😀콘",
+    "dirname_idx": 7,
+    "dirname": "😀콘",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_😀콘.png"
+    }
+  },
+  {
+    "name": "tab\there",
+    "sanitize": "tab_here",
+    "dirname_idx": 7,
+    "dirname": "tab_here",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_tab_here.png"
+    }
+  },
+  {
+    "name": "a.",
+    "sanitize": "a",
+    "dirname_idx": 7,
+    "dirname": "a",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_a.png"
+    }
+  },
+  {
+    "name": "NUL.txt",
+    "sanitize": "NUL.txt",
+    "dirname_idx": 7,
+    "dirname": "NUL.txt",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_NUL.txt.png"
+    }
+  },
+  {
+    "name": "<>|*\u0001",
+    "sanitize": "_____",
+    "dirname_idx": 7,
+    "dirname": "_____",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03______.png"
+    }
+  },
+  {
+    "name": "COM1",
+    "sanitize": "_COM1",
+    "dirname_idx": 7,
+    "dirname": "_COM1",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_COM1.png"
+    }
+  },
+  {
+    "name": "lpt9.png",
+    "sanitize": "lpt9.png",
+    "dirname_idx": 7,
+    "dirname": "lpt9.png",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_lpt9.png.png"
+    }
+  },
+  {
+    "name": "정상 이름",
+    "sanitize": "정상 이름",
+    "dirname_idx": 7,
+    "dirname": "정상 이름",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_정상 이름.png"
+    }
+  },
+  {
+    "name": "a  b\t\nc",
+    "sanitize": "a b__c",
+    "dirname_idx": 7,
+    "dirname": "a b__c",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_a b__c.png"
+    }
+  },
+  {
+    "name": "end . .",
+    "sanitize": "end",
+    "dirname_idx": 7,
+    "dirname": "end",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_end.png"
+    }
+  },
+  {
+    "name": "\"quoted\"",
+    "sanitize": "_quoted_",
+    "dirname_idx": 7,
+    "dirname": "_quoted_",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03__quoted_.png"
+    }
+  },
+  {
+    "name": "a\\b",
+    "sanitize": "a\\b",
+    "dirname_idx": 7,
+    "dirname": "a\\b",
+    "item": {
+      "sort": 3,
+      "ext": ".PNG",
+      "width": 2,
+      "file": "03_a\\b.png"
+    }
+  },
+  {
+    "name": "",
+    "sanitize": "untitled",
+    "dirname_idx": 7,
+    "dirname": "package_7",
+    "item": {
+      "sort": 12,
+      "ext": "gif",
+      "width": 3,
+      "file": "012_.gif"
+    }
+  },
+  {
+    "name": "a/b:c?",
+    "sanitize": "a_b_c_",
+    "dirname_idx": 7,
+    "dirname": "a_b_c_",
+    "item": {
+      "sort": 12,
+      "ext": "gif",
+      "width": 3,
+      "file": "012_a_b_c_.gif"
+    }
+  },
+  {
+    "name": "😀콘",
+    "sanitize": "😀콘",
+    "dirname_idx": 7,
+    "dirname": "😀콘",
+    "item": {
+      "sort": 12,
+      "ext": "gif",
+      "width": 3,
+      "file": "012_😀콘.gif"
+    }
+  },
+  {
+    "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "sanitize": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "dirname_idx": 7,
+    "dirname": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "item": {
+      "sort": 12,
+      "ext": "gif",
+      "width": 3,
+      "file": "012_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.gif"
+    }
+  }
+]

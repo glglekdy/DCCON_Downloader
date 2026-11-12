@@ -1,0 +1,39 @@
+[package]
+name = "dccon-downloader"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "dccon-downloader"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+dccon-core = { path = "../crates/core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "time"] }
+tokio-util = "0.7"
+percent-encoding = "2"
+url = "2"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
+
+[features]
+console = []
+
+[dev-dependencies]
+# ACL 시험용 모의 런타임 (tauri::test). 시험 빌드에만 들어간다.
+tauri = { version = "2", features = ["test"] }
+tempfile = "3"
+wiremock = "0.6"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

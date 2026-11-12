@@ -1,0 +1,161 @@
+//! 앱 전역 상태.
+
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
+
+use dccon_core::cache::{ImageCache, MetaCache};
+use dccon_core::config::{Paths, Settings};
+use dccon_core::http::{Client, Throttle};
+use dccon_core::models::{Package, Site};
+use dccon_core::updater::Release;
+use dccon_core::{arca, dccon, Error};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio_util::sync::CancellationToken;
+
+use crate::queue::Queue;
+
+/// 업데이트 확인·받기 도중에 들고 있는 값.
+#[derive(Default)]
+pub struct UpdateSlot {
+    /// 마지막으로 확인한 새 릴리즈.
+    pub release: Option<Release>,
+    /// 받아 둔 새 exe.
+    pub downloaded: Option<PathBuf>,
+    /// 받는 중이면 취소용.
+    pub cancel: Option<CancellationToken>,
+}
+
+pub struct AppState {
+    pub paths: Paths,
+    pub settings: RwLock<Settings>,
+    pub dccon: Client,
+    pub arca: Client,
+    pub images: ImageCache,
+    pub meta: MetaCache,
+    pub nav: RwLock<Arc<Semaphore>>,
+    pub thumb: RwLock<Arc<Semaphore>>,
+    pub view_gen: AtomicU64,
+    pub queue: Queue,
+    pub update: Mutex<UpdateSlot>,
+    /// 지난 실행에서 남은 업데이트 실패 사유. 한 번 읽으면 비운다.
+    pub last_error: Mutex<Option<String>>,
+    /// 아카콘 클라이언트에 로그인 세션이 붙어 있나 (`login::has_session`).
+    pub arca_logged_in: AtomicBool,
+    /// 시작 정리(`tidy_sibling_builds`)가 exe 이름을 바꿨으면 바뀐 경로. 윈도우는 실행 중에
+    /// 이름이 바뀌어도 `current_exe()` 가 옛 경로를 돌려주므로 업데이트 적용은 이 값을 먼저 쓴다.
+    pub exe_path: OnceLock<PathBuf>,
+}
+
+fn thumb_permits(n: u32) -> usize {
+    n.max(2) as usize
+}
+
+impl AppState {
+    pub fn new(paths: Paths) -> AppState {
+        let settings = Settings::load(&paths.settings);
+        let thumb = Arc::new(Semaphore::new(thumb_permits(settings.concurrency)));
+        AppState {
+            settings: RwLock::new(settings),
+            dccon: Client::new("https://dccon.dcinside.com/", Throttle::default_site()),
+            arca: Client::new("https://arca.live/e/", Throttle::default_site()),
+            images: ImageCache::new(paths.cache_img.clone()),
+            meta: MetaCache::new(paths.cache_meta.clone()),
+            nav: RwLock::new(Arc::new(Semaphore::new(2))),
+            thumb: RwLock::new(thumb),
+            view_gen: AtomicU64::new(0),
+            queue: Queue::default(),
+            update: Mutex::new(UpdateSlot::default()),
+            last_error: Mutex::new(None),
+            arca_logged_in: AtomicBool::new(false),
+            exe_path: OnceLock::new(),
+            paths,
+        }
+    }
+
+    pub fn take_last_error(&self) -> Option<String> {
+        self.last_error.lock().unwrap().take()
+    }
+
+    pub fn client(&self, site: Site) -> &Client {
+        match site {
+            Site::Dccon => &self.dccon,
+            Site::Arca => &self.arca,
+        }
+    }
+
+    /// 썸네일 세마포어를 새로 만들어 교체한다. 다운로드는 실행 시작 때 읽는다.
+    pub fn apply_concurrency(&self, n: u32) {
+        *self.thumb.write().unwrap() = Arc::new(Semaphore::new(thumb_permits(n)));
+    }
+
+    pub async fn nav_permit(&self) -> Result<OwnedSemaphorePermit, Error> {
+        let sem = self.nav.read().unwrap().clone();
+        sem.acquire_owned().await.map_err(|_| Error::Cancelled)
+    }
+
+    /// 패키지 상세를 읽는다. 디시콘은 메타 캐시 우선, 아카콘은 캐시하지 않는다.
+    pub async fn load_package(
+        &self,
+        site: Site,
+        id: u64,
+        cancel: &CancellationToken,
+    ) -> Result<Package, Error> {
+        match site {
+            Site::Dccon => {
+                if let Some(pkg) = self.meta.load(id).and_then(|v| Package::from_api(&v)) {
+                    return Ok(pkg);
+                }
+                let (pkg, payload) = dccon::fetch_package(&self.dccon, id, cancel).await?;
+                self.meta.store(id, &payload);
+                Ok(pkg)
+            }
+            Site::Arca => arca::fetch_package(&self.arca, id, cancel).await,
+        }
+    }
+}
+
+/// 업데이트를 적용·재시작할 exe 경로: 시작 정리가 남긴 경로가 있으면 그것, 없으면 `fallback`.
+fn exe_path_or(
+    stored: Option<&PathBuf>,
+    fallback: impl FnOnce() -> std::io::Result<PathBuf>,
+) -> std::io::Result<PathBuf> {
+    match stored {
+        Some(p) => Ok(p.clone()),
+        None => fallback(),
+    }
+}
+
+impl AppState {
+    /// 지금 실행 중인 exe 의 실제 경로 (`exe_path` 우선, 없으면 `current_exe()`).
+    pub fn running_exe(&self) -> std::io::Result<PathBuf> {
+        exe_path_or(self.exe_path.get(), std::env::current_exe)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exe_path_prefers_renamed_path() {
+        let renamed = PathBuf::from(r"C:\apps\디시콘 다운로더.exe");
+        let got = exe_path_or(Some(&renamed), || panic!("current_exe 를 부르면 안 된다"));
+        assert_eq!(got.unwrap(), renamed);
+        let stale = PathBuf::from(r"C:\apps\dccon-downloader-2.0.0.exe");
+        assert_eq!(exe_path_or(None, || Ok(stale.clone())).unwrap(), stale);
+    }
+
+    #[test]
+    fn state_exe_path_uses_stored_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::new(Paths::new(dir.path().to_path_buf()));
+        assert_eq!(
+            state.running_exe().unwrap(),
+            std::env::current_exe().unwrap()
+        );
+        let renamed = dir.path().join("디시콘 다운로더.exe");
+        state.exe_path.set(renamed.clone()).unwrap();
+        assert_eq!(state.running_exe().unwrap(), renamed);
+    }
+}

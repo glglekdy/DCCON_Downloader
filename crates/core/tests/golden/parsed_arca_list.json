@@ -1,0 +1,17 @@
+{
+  "rows": [
+    {
+      "idx": 54566,
+      "title": "고양이 & 밴시",
+      "seller": "작가1",
+      "thumb_url": "https://ac.arca.live/20260922sac/aa.png?expires=1&key=k"
+    },
+    {
+      "idx": 48750,
+      "title": "움짤콘",
+      "seller": "작가2",
+      "thumb_url": "https://ac.arca.live/x/bb.gif?expires=1&key=k"
+    }
+  ],
+  "pages": 12
+}
